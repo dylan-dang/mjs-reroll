@@ -2,9 +2,12 @@
   "name": "mjs-reroll",
   "module": "index.ts",
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "protobufjs-cli": "^1.2.0"
   },
   "scripts": {
+    "download": "bun run scripts/download.ts",
+    "proto:gen": "pbjs -t static --no-beautify external/res/proto/liqi.json | pbts --no-comments -o src/liqi.d.ts -",
     "start": "bun run src/index.ts"
   },
   "peerDependencies": {

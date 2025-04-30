@@ -1,3 +1,6 @@
+import { argv } from 'process';
+import type { EventEmitter } from 'stream';
+
 export function* generateVariants(email: string) {
   const [local, domain] = email.split('@');
   const n = local.length;
@@ -55,4 +58,15 @@ export function* drop<T>(
     }
     yield item;
   }
+}
+
+type Key<K, T> = T extends [never] ? string | symbol : K | keyof T;
+
+export function once<T extends Record<any, any[]>, K extends keyof T>(
+  emitter: EventEmitter<T>,
+  eventName: Key<K, T>
+) {
+  return new Promise<T[K][0]>((resolve) => {
+    emitter.once(eventName, resolve as any);
+  });
 }

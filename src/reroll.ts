@@ -1,10 +1,10 @@
 import * as auth from './passport';
 import assert from 'assert';
-import { sleep } from './utils';
+import { once, sleep } from './utils';
 import type { gmail_v1 } from 'googleapis';
 import { z } from 'zod';
 import { NetAgent } from './api';
-import { createHmac } from 'crypto';
+import { Game, Operation } from './game';
 
 const loginCacheSchema = z.record(
   z.object({
@@ -81,7 +81,11 @@ async function login(gmail: gmail_v1.Gmail, email: string) {
   }
 }
 
-export async function reroll(gmail: gmail_v1.Gmail, email: string) {
+export async function reroll(
+  gmail: gmail_v1.Gmail,
+  email: string,
+  debug = true
+) {
   const lobbyAgent = new NetAgent(NetAgent.gateway, { throwErrors: true });
   const Lobby = lobbyAgent.proxyService('Lobby');
 
@@ -90,9 +94,13 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     lobbyAgent.waitForOpen(),
   ]);
 
-  await Lobby.heatbeat({
-    no_operation_counter: 0,
-  });
+  setInterval(
+    () =>
+      void Lobby.heatbeat({
+        no_operation_counter: 0,
+      }),
+    30000
+  );
 
   const type = 7;
   const client_version_string = `web-${lobbyAgent.version.slice(0, -2)}`;
@@ -145,8 +153,6 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
 
   assert(account, 'account is null!');
 
-  console.log('logged in to', email);
-
   const { account_id, nickname } = account;
 
   assert(account_id, 'account_id is null!');
@@ -160,75 +166,127 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     });
   }
 
+  console.log('Logged in to Mahjong Soul using', email, 'as', nickname);
+
   await Lobby.loginBeat({
     contract: 'DF2vkXCnfeXp4WoGSBGNcJBufZiMN3UP',
   });
 
   await Lobby.loginSuccess();
 
-  // await Lobby.startUnifiedMatch({
-  //   client_version_string,
-  //   match_sid: '1:2', // bronze east
-  // });
-
-  await Lobby.createRoom({
-    client_version_string,
-    public_live: false,
-    player_count: 1,
-    mode: {
-      ai: true,
-      detail_rule: {
-        ai_level: 1,
-        bianjietishi: true,
-        dora_count: 3,
-        fandian: 30000,
-        fanfu: 1,
-        guyi_mode: 0,
-        init_point: 25000,
-        open_hand: 0,
-        shiduan: 0,
-        time_add: 20,
-        time_fixed: 5
+  if (debug) {
+    await Lobby.createRoom({
+      client_version_string,
+      public_live: false,
+      player_count: 1,
+      mode: {
+        ai: true,
+        detail_rule: {
+          ai_level: 1,
+          bianjietishi: true,
+          dora_count: 3,
+          fandian: 30000,
+          fanfu: 1,
+          guyi_mode: 0,
+          init_point: 25000,
+          open_hand: 0,
+          shiduan: 0,
+          time_add: 20,
+          time_fixed: 5,
+        },
+        mode: 3,
       },
-      mode: 3,
-    }
-  });
+    });
 
-  await Lobby.startRoom();
+    await Lobby.startRoom();
+  } else {
+    await Lobby.startUnifiedMatch({
+      client_version_string,
+      match_sid: '1:2', // bronze east
+    });
+  }
 
-  console.log('waiting for match game start...');
+  console.log('waiting for match...');
 
-  // const { connect_token, game_uuid } = await agent.waitForNotification('NotifyMatchGameStart');
-  const { connect_token, game_uuid } = await lobbyAgent.waitForNotification('NotifyRoomGameStart');
+  const { connect_token, game_uuid } = await once(
+    lobbyAgent.notify,
+    debug ? 'NotifyRoomGameStart' : 'NotifyMatchGameStart'
+  );
   console.log('match found!');
 
   assert(connect_token, 'connect_token is null!');
   assert(game_uuid, 'game_uuid is null!');
-  
-  const gameAgent = new NetAgent(NetAgent.gameGateway, {debugNotifications: true})
-  const FastTest = gameAgent.proxyService('FastTest');
 
-  const hmac = createHmac('sha256', 'damajiang');
-  hmac.update(connect_token + account_id + game_uuid);
-  const gift = hmac.digest('hex');
+  const game = new Game(account_id, game_uuid, connect_token);
+  await game.init();
 
-  await gameAgent.waitForOpen();
-
-  await FastTest.authGame({
-    account_id: account.account_id,
-    game_uuid,
-    token: connect_token,
-    gift
+  game.on('newRound', () => {
+    console.log(
+      'Round',
+      ['East', 'South', 'West', 'Norht'][game.round],
+      game.jun + 1,
+      game.honba ? `Repeat ${game.honba}` : '',
+      'started!'
+    );
+    console.log('seat:', game.seat);
+    console.log(
+      'points:',
+      game.players.map((player) => player.score)
+    );
   });
-  
 
-  await FastTest.enterGame();
+  game.on('discard', ({ tile, seat }) => {
+    console.log('player', seat, 'discards', tile);
+  });
 
-  const data = await gameAgent.waitForNotification("ActivityFestivalData");
+  game.on('operation', async ({ operation_list }) => {
+    assert(operation_list);
+    const timeuse = Math.random() * 3;
+    await sleep(timeuse * 1000);
 
-  const {tiles} = await gameAgent.waitForNotification("ActionNewRound");
-  
-  
-  gameAgent.close();
+    if (operation_list.find((op) => op.type === Operation.Discard)) {
+      const index = Math.floor(Math.random() * game.hand.length);
+      const tile = game.hand[index];
+      console.log('discarded: ', tile.toString());
+      await game.FastTest.inputOperation({
+        type: Operation.Discard,
+        moqie: index === game.hand.length - 1,
+        tile: tile.toString(),
+        tile_state: 0,
+        timeuse: Math.floor(timeuse),
+      });
+      return;
+    }
+
+    console.log(
+      'skipped operations: ',
+      operation_list.map((op) => Operation[op.type!]).join(', ')
+    );
+    await game.FastTest.inputChiPengGang({
+      cancel_operation: true,
+      timeuse: Math.floor(timeuse),
+    });
+  });
+
+  game.agent.notify.on('ActionHule', ({ hules, gameend, scores }) => {
+    for (const hule of hules) {
+      console.log('Player', hule.seat, hule.zimo ? 'tsumo!' : 'ron!');
+    }
+    if (gameend) console.log('final scores: ', scores);
+
+    game.FastTest.confirmNewRound();
+  });
+
+  game.agent.notify.on('ActionNoTile', ({ gameend, scores }) => {
+    console.log('Exhaustive Draw!');
+    if (gameend) console.log('final scores: ', scores);
+
+    game.FastTest.confirmNewRound();
+  });
+
+  await once(game.agent.notify, 'NotifyGameEndResult');
+  console.log('game ended!');
+
+  game.agent.close();
   lobbyAgent.close();
 }

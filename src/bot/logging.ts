@@ -3,195 +3,192 @@
 // Contains logging functions
 //################################
 
-import type { isPlayerRiichi } from "./api";
-import { LOG_AMOUNT, USE_EMOJI, dora, ownHand, calls, discards, seatWind, roundWind, tilesLeft } from "./parameters";
-import { isDebug, getTileDoraValue, getTileEmoji, getNumberOfPlayers } from "./utils";
+import type { TilePriority } from './ai_offense';
+import type { AlphaJong } from './bot';
+import { Tile } from './tile';
 
-//Print string to HTML or console
-export function log(t) {
-	if (isDebug()) {
-		document.body.innerHTML += t + "<br>";
-	}
-	else {
-		console.log(t);
-	}
-}
+export class Logger {
+  constructor(private ai: AlphaJong) {}
 
-//Print all tiles in hand
-export function printHand(hand) {
-	var handString = getStringForTiles(hand);
-	log("Hand:" + handString);
-}
+  //Print string to HTML or console
+  log(t: any) {
+    console.log(t);
+  }
 
-//Get String for array of tiles
-export function getStringForTiles(tiles) {
-	var tilesString = "";
-	var oldType = "";
-	tiles.forEach(function (tile) {
-		if (getNameForType(tile.type) != oldType) {
-			tilesString += oldType;
-			oldType = getNameForType(tile.type);
-		}
-		if (tile.dora == 1) {
-			tilesString += "0";
-		}
-		else {
-			tilesString += tile.index;
-		}
-	});
-	tilesString += oldType;
-	return tilesString;
-}
+  //Print all tiles in hand
+  printHand(hand: Tile[]) {
+    var handString = this.getStringForTiles(hand);
+    this.log('Hand:' + handString);
+  }
 
-//Print tile name
-export function printTile(tile) {
-	log(getTileName(tile, false));
-}
+  //Get String for array of tiles
+  getStringForTiles(tiles: Tile[]) {
+    var tilesString = '';
+    var oldType = '';
+    tiles.forEach((tile) => {
+      if (this.getNameForType(tile.type) != oldType) {
+        tilesString += oldType;
+        oldType = this.getNameForType(tile.type);
+      }
+      if (tile.dora) {
+        tilesString += '0';
+      } else {
+        tilesString += tile.index;
+      }
+    });
+    tilesString += oldType;
+    return tilesString;
+  }
 
-//Print given tile priorities
-export function printTilePriority(tiles) {
-	log("Overall: Value Open: <" + Number(tiles[0].score.open).toFixed(0) +
-		"> Closed Value: <" + Number(tiles[0].score.closed).toFixed(0) +
-		"> Riichi Value: <" + Number(tiles[0].score.riichi).toFixed(0) +
-		"> Shanten: <" + Number(tiles[0].shanten).toFixed(0) + ">");
-	for (var i = 0; i < tiles.length && i < LOG_AMOUNT; i++) {
-		log(getTileName(tiles[i].tile, false) +
-			": Priority: <" + Number(tiles[i].priority).toFixed(3) +
-			"> Efficiency: <" + Number(tiles[i].efficiency).toFixed(3) +
-			"> Yaku Open: <" + Number(tiles[i].yaku.open).toFixed(3) +
-			"> Yaku Closed: <" + Number(tiles[i].yaku.closed).toFixed(3) +
-			"> Dora: <" + Number(tiles[i].dora).toFixed(3) +
-			"> Waits: <" + Number(tiles[i].waits).toFixed(3) +
-			"> Danger: <" + Number(tiles[i].danger).toFixed(2) + ">");
-	}
-}
+  //Print tile name
+  printTile(tile: Tile) {
+    this.log(this.getTileName(tile, false));
+  }
 
-//Input string to get an array of tiles (e.g. "123m456p789s1z")
-export function getTilesFromString(inputString) {
-	var numbers = [];
-	var tiles = [];
-	for (let input of inputString) {
-		var type = 4;
-		switch (input) {
-			case "p":
-				type = 0;
-				break;
-			case "m":
-				type = 1;
-				break;
-			case "s":
-				type = 2;
-				break;
-			case "z":
-				type = 3;
-				break;
-			default:
-				numbers.push(input);
-				break;
-		}
-		if (type != "4") {
-			for (let number of numbers) {
-				if (parseInt(number) == 0) {
-					tiles.push({ index: 5, type: type, dora: true, doraValue: 1, valid: true });
-				}
-				else {
-					tiles.push({ index: parseInt(number), type: type, dora: false, doraValue: 0, valid: true });
-				}
-			}
-			numbers = [];
-		}
-	}
-	return tiles;
-}
+  //Print given tile priorities
+  printTilePriority(tiles: TilePriority[]) {
+    this.log(
+      'Overall: Value Open: <' +
+        Number(tiles[0].score.open).toFixed(0) +
+        '> Closed Value: <' +
+        Number(tiles[0].score.closed).toFixed(0) +
+        '> Riichi Value: <' +
+        Number(tiles[0].score.riichi).toFixed(0) +
+        '> Shanten: <' +
+        Number(tiles[0].shanten).toFixed(0) +
+        '>'
+    );
+    for (var i = 0; i < tiles.length && i < this.ai.LOG_AMOUNT; i++) {
+      this.log(
+        this.getTileName(tiles[i].tile, false) +
+          ': Priority: <' +
+          Number(tiles[i].priority).toFixed(3) +
+          '> Efficiency: <' +
+          Number(tiles[i].efficiency).toFixed(3) +
+          '> Yaku Open: <' +
+          Number(tiles[i].yaku.open).toFixed(3) +
+          '> Yaku Closed: <' +
+          Number(tiles[i].yaku.closed).toFixed(3) +
+          '> Dora: <' +
+          Number(tiles[i].dora).toFixed(3) +
+          '> Waits: <' +
+          Number(tiles[i].waits).toFixed(3) +
+          '> Danger: <' +
+          Number(tiles[i].danger).toFixed(2) +
+          '>'
+      );
+    }
+  }
 
-//Input string to get a tiles (e.g. "1m")
-export function getTileFromString(inputString) {
-	var type = 4;
-	var dr = false;
-	switch (inputString[1]) {
-		case "p":
-			type = 0;
-			break;
-		case "m":
-			type = 1;
-			break;
-		case "s":
-			type = 2;
-			break;
-		case "z":
-			type = 3;
-			break;
-	}
-	var index = inputString[0];
-	if (inputString[0] == "0") {
-		index = "5";
-		dr = true;
-	}
-	if (type != "4") {
-		var tile = { index: parseInt(index), type: type, dora: dr, valid: true };
-		tile.doraValue = getTileDoraValue(tile);
-		return tile;
-	}
-	return null;
-}
+  //Input string to get an array of tiles (e.g. "123m456p789s1z")
+  getTilesFromString(inputString: string) {
+    var numbers = [];
+    var tiles: Tile[] = [];
+    for (let input of inputString) {
+      var type = 4;
+      switch (input) {
+        case 'p':
+          type = 0;
+          break;
+        case 'm':
+          type = 1;
+          break;
+        case 's':
+          type = 2;
+          break;
+        case 'z':
+          type = 3;
+          break;
+        default:
+          numbers.push(input);
+          break;
+      }
+      if (type != 4) {
+        for (let number of numbers) {
+          if (parseInt(number) == 0) {
+            tiles.push(
+              new Tile({
+                index: 5,
+                type: type,
+                dora: true,
+                doraValue: 1,
+                valid: true,
+              })
+            );
+          } else {
+            tiles.push(
+              new Tile({
+                index: parseInt(number),
+                type: type,
+                dora: false,
+                doraValue: 0,
+                valid: true,
+              })
+            );
+          }
+        }
+        numbers = [];
+      }
+    }
+    return tiles;
+  }
 
-//Returns the name for a tile
-export function getTileName(tile, useRaw = true) {
-	let name = "";
-	if (tile.dora == true) {
-		name = "0" + getNameForType(tile.type);
-	} else {
-		name = tile.index + getNameForType(tile.type);
-	}
+  //Returns the name for a tile
+  getTileName(tile: Tile, useRaw = true) {
+    let name = '';
+    if (tile.dora == true) {
+      name = '0' + this.getNameForType(tile.type);
+    } else {
+      name = tile.index + this.getNameForType(tile.type);
+    }
 
-	if (!useRaw && USE_EMOJI) {
-		return `${getTileEmoji(tile.type, tile.index, tile.dora)}: ${name}`;
-	} else {
-		return name;
-	}
-}
+    if (!useRaw && this.ai.USE_EMOJI) {
+      return `${tile.emoji()}: ${name}`;
+    } else {
+      return name;
+    }
+  }
 
-//Returns the corresponding char for a type
-export function getNameForType(type) {
-	switch (type) {
-		case 0:
-			return "p";
-		case 1:
-			return "m";
-		case 2:
-			return "s";
-		case 3:
-			return "z";
-		default:
-			return "?";
-	}
-}
+  //Returns the corresponding char for a type
+  getNameForType(type: Tile['type']) {
+    switch (type) {
+      case 0:
+        return 'p';
+      case 1:
+        return 'm';
+      case 2:
+        return 's';
+      case 3:
+        return 'z';
+      default:
+        return '?';
+    }
+  }
 
-//returns a string for the current state of the game
-export function getDebugString() {
-	var debugString = "";
-	debugString += getStringForTiles(dora) + "|";
-	debugString += getStringForTiles(ownHand) + "|";
-	debugString += getStringForTiles(calls[0]) + "|";
-	debugString += getStringForTiles(calls[1]) + "|";
-	debugString += getStringForTiles(calls[2]) + "|";
-	if (getNumberOfPlayers() == 4) {
-		debugString += getStringForTiles(calls[3]) + "|";
-	}
-	debugString += getStringForTiles(discards[0]) + "|";
-	debugString += getStringForTiles(discards[1]) + "|";
-	debugString += getStringForTiles(discards[2]) + "|";
-	if (getNumberOfPlayers() == 4) {
-		debugString += getStringForTiles(discards[3]) + "|";
-	}
-	if (getNumberOfPlayers() == 4) {
-		debugString += (isPlayerRiichi(0) * 1) + "," + (isPlayerRiichi(1) * 1) + "," + (isPlayerRiichi(2) * 1) + "," + (isPlayerRiichi(3) * 1) + "|";
-	}
-	else {
-		debugString += (isPlayerRiichi(0) * 1) + "," + (isPlayerRiichi(1) * 1) + "," + (isPlayerRiichi(2) * 1) + "|";
-	}
-	debugString += seatWind + "|";
-	debugString += roundWind + "|";
-	debugString += tilesLeft;
-	return debugString;
+  //returns a string for the current state of the game
+  getDebugString() {
+    var debugString = '';
+    debugString += this.getStringForTiles(this.ai.game.doraIndicators!) + '|';
+    debugString += this.getStringForTiles(this.ai.game.hand) + '|';
+    debugString += this.getStringForTiles(this.ai.calls[0]) + '|';
+    debugString += this.getStringForTiles(this.ai.calls[1]) + '|';
+    debugString += this.getStringForTiles(this.ai.calls[2]) + '|';
+    if (this.ai.utils.getNumberOfPlayers() == 4) {
+      debugString += this.getStringForTiles(this.ai.calls[3]) + '|';
+    }
+    debugString += this.getStringForTiles(this.ai.game.players[0].pond) + '|';
+    debugString += this.getStringForTiles(this.ai.game.players[1].pond) + '|';
+    debugString += this.getStringForTiles(this.ai.game.players[2].pond) + '|';
+    if (this.ai.utils.getNumberOfPlayers() == 4) {
+      debugString += this.getStringForTiles(this.ai.game.players[3].pond) + '|';
+    }
+    debugString += this.ai.game.players
+      .map((player) => Number(!!player.riichiTile))
+      .join(', ');
+    debugString += '|';
+    debugString += this.ai.seatWind + '|';
+    debugString += this.ai.roundWind + '|';
+    debugString += this.ai.game.tilesLeft;
+    return debugString;
+  }
 }

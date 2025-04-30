@@ -1,7 +1,8 @@
 import assert from 'assert';
 import { z } from 'zod';
+import { yo_service_url } from '../external/config.json';
 
-const passport = 'https://passport.mahjongsoul.com/';
+const [passport] = yo_service_url;
 
 async function send(path: string, payload: any) {
   const req = await fetch(new URL(path, passport), {
@@ -17,7 +18,10 @@ export async function requestAuthCode(email: string) {
     account: email,
     lang: 'en',
   });
-  assert(res.result === 0, `Auth request failed!, recieved ${JSON.stringify(res)}`);
+  assert(
+    res.result === 0,
+    `Auth request failed!, recieved ${JSON.stringify(res)}`
+  );
 }
 
 const authSubmitResultSchema = z.object({

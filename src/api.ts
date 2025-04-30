@@ -1,21 +1,12 @@
-import pb from 'protobufjs';
-import assert from 'assert';
-import { liqi } from './liqi.proto';
-import { z } from 'zod';
-import { Codec, type UnwrappedMessage } from './codec';
+import pb, { type rpc } from 'protobufjs';
+import { Codec } from './codec';
+import type { lq } from './liqi.d.ts';
+import liqi from '../external/res/proto/liqi.json' with { type: 'json' };
+import { version } from '../external/version.json' with { type: 'json' };
+import { EventEmitter } from 'events';
+import { servers } from '../external/server.json' with {type: 'json'};
 
-const versionInfoSchema = z.object({
-  version: z.string(),
-  force_version: z.string(),
-  code: z.string(),
-});
-export async function getVersionInfo() {
-  const res = await fetch(`https://mahjongsoul.game.yo-star.com/version.json`);
-  const data = await res.json();
-  return versionInfoSchema.parse(data);
-}
-
-const { version } = await getVersionInfo();
+const [server] = servers;
 
 export enum MessageType {
   Notification = 1,
@@ -23,63 +14,35 @@ export enum MessageType {
   Response = 3,
 }
 
-export type ProtobufSchemas = typeof liqi.nested.lq.nested;
-export type ServiceNames<T> = {
-  [K in keyof T]-?: T[K] extends {
-    methods: Record<
-      string,
-      {
-        requestType: string;
-        responseType: string;
-      }
-    >;
-  }
-    ? K
-    : never;
-}[keyof T];
-export type MethodNames<ServiceName extends ServiceNames<ProtobufSchemas>> =
-  Extract<keyof ProtobufSchemas[ServiceName]['methods'], string>;
+export type ProtobufClass<T extends keyof typeof lq> = 
+(typeof lq)[T] extends abstract new (...args: any) => any
+  ? (typeof lq)[T]
+  : never
+  ;
 
-export type MethodParam<
-  ServiceName extends ServiceNames<ProtobufSchemas>,
-  MethodName extends MethodNames<ServiceName>
-> = ProtoSchemaToTs<
-  ProtobufSchemas[RequestType<
-    ServiceName,
-    MethodName
-  > extends keyof ProtobufSchemas
-    ? RequestType<ServiceName, MethodName>
-    : never]
->;
+export type TypeName<T = keyof typeof lq> = T extends keyof typeof lq
+? ProtobufClass<T> extends never
+  ? never
+  : InstanceType<ProtobufClass<T>> extends rpc.Service
+  ? never
+  : T
+: never;
 
-export type MethodReturn<
-  ServiceName extends ServiceNames<ProtobufSchemas>,
-  MethodName extends MethodNames<ServiceName>
-> = ProtoSchemaToTs<
-  ProtobufSchemas[ResponseType<
-    ServiceName,
-    MethodName
-  > extends keyof ProtobufSchemas
-    ? ResponseType<ServiceName, MethodName>
-    : never]
->;
-
-export type RequestType<
-  R extends ServiceNames<ProtobufSchemas>,
-  P extends Extract<keyof ProtobufSchemas[R]['methods'], string>
-> = ProtobufSchemas[R]['methods'][P] extends { requestType: infer Req }
-  ? Req
+export type ServiceName<T = keyof typeof lq> = T extends keyof typeof lq
+  ? ProtobufClass<T> extends never
+    ? never
+    : InstanceType<ProtobufClass<T>> extends rpc.Service
+    ? T
+    : never
   : never;
 
-export type ResponseType<
-  R extends ServiceNames<ProtobufSchemas>,
-  P extends Extract<keyof ProtobufSchemas[R]['methods'], string>
-> = ProtobufSchemas[R]['methods'][P] extends { responseType: infer Res }
-  ? Res
-  : never;
 
-export type ServiceProxy<ServiceName extends ServiceNames<ProtobufSchemas>> = {
-  [MethodName in MethodNames<ServiceName>]: typeof NetAgent.prototype.sendRequest<ServiceName, MethodName> extends (arg0: any, arg1: any, ...rest: infer Args) => infer Ret ? (...args: Args) => Ret : never
+
+export type MethodName<S extends ServiceName> = Exclude<keyof InstanceType<ProtobufClass<S>>, keyof rpc.Service | symbol>;
+export type Method<S extends ServiceName, M extends MethodName<S>> = InstanceType<ProtobufClass<S>>[M];
+
+export type ServiceProxy<S extends ServiceName> = {
+  [M in MethodName<S>]: Method<S, M> extends (request: infer Req) => Promise<infer Res> ? (request?: Req) => Promise<Res> : never;
 };
 
 export type FieldTypeMap = {
@@ -92,67 +55,25 @@ export type FieldTypeMap = {
   bytes: Buffer;
 };
 
-export type ProtoSchemaToTs<T, Path extends string[] = []> = Partial<
-  T extends {
-    fields: Record<string, { type: string; rule?: string }>;
-  }
-    ? {
-        [K in keyof T['fields']]: T['fields'][K] extends {
-          type: infer TypeName extends string;
-          rule?: string;
-        }
-          ? TypeName extends keyof FieldTypeMap
-            ? T['fields'][K]['rule'] extends 'repeated'
-              ? FieldTypeMap[TypeName][]
-              : FieldTypeMap[TypeName]
-            : TypeName extends keyof ProtobufSchemas
-            ? T['fields'][K]['rule'] extends 'repeated'
-              ? ProtoSchemaToTs<
-                  ProtobufSchemas[TypeName],
-                  [...Path, K & string]
-                >[]
-              : ProtoSchemaToTs<
-                  ProtobufSchemas[TypeName],
-                  [...Path, K & string]
-                >
-            : never
-          : never;
-      } extends infer Mapped
-      ? Mapped
-      : never
-    : never
->;
 
-export type NetAgentOptions = {
+export interface NetAgentOptions {
   throwErrors: boolean;
   debugNotifications: boolean;
   debugResponses: boolean;
 };
 
-type NotificationCallbackReturn<R extends keyof ProtobufSchemas> = UnwrappedMessage<ProtoSchemaToTs<ProtobufSchemas[R]>>;
-
-const file = Bun.file('./actions.txt');
-const writer = file.writer();
-
 export class NetAgent extends WebSocket {
-  static gateway = 'wss://engame.mahjongsoul.com/gateway';
-  static gameGateway = 'wss://engame.mahjongsoul.com/game-gateway-zone';
-  private msgQueue: { name: string; cb: (response: any) => void }[] = [];
+  static gateway = `wss://${server}/gateway`;
+  static gameGateway = `wss://${server}/game-gateway-zone`;
+  private msgQueue: { name: TypeName; cb: (response: any) => void }[] = [];
   private msgIndex = 0;
-  private events: Record<string, Function[]> = {};
   public version = version;
   private readonly codec = new Codec(pb.Root.fromJSON(liqi as pb.INamespace));
   public throwErrors: boolean;
   public debugNotifications: boolean;
   public debugResponses: boolean;
 
-  private emit(event: string, data: any) {
-    const callbacks = this.events[event];
-    if (!callbacks) return;
-    for (const cb of callbacks) {
-      cb(data);
-    }
-  }
+  public readonly notify = new EventEmitter<{[T in TypeName]: [InstanceType<ProtobufClass<T>>] }>();
 
   constructor(url: string, opts: Partial<NetAgentOptions> = {}) {
     super(url);
@@ -161,74 +82,46 @@ export class NetAgent extends WebSocket {
     this.debugResponses = opts.debugResponses ?? false;
 
     this.addEventListener('message', (event: MessageEvent<Buffer>) => {
-      const {data, name, ...msg} = this.codec.decodeMessage(event.data, this.msgQueue);
+      const msg = this.codec.decodeMessage(event.data, this.msgQueue);
 
       if (msg.type === MessageType.Notification) {
-
+        
         // if(this.debugNotifications) console.log(`Notification: ${name}`, data.toJSON());
-        this.emit(name, data);
+        this.notify.emit(msg.name, msg.data as any);
 
-        if (name === "ActionPrototype") {
-          assert(data.name, "ActionPrototype has no name");
+        if (msg.name === "ActionPrototype") {
+          const actionName = msg.data.name as TypeName;
+          const action = this.codec.decode(actionName, this.codec.enDecodeAction(msg.data.data!));
+          
+          if(this.debugNotifications) console.log(`Action: ${msg.data.name}`, action.toJSON());
 
-          const action = this.codec.decode(data.name, this.codec.enDecodeAction(data.data));
-          if(this.debugNotifications) console.log(`Action: ${data.name}`, action.toJSON());
-          writer.write(`${data.name} ${JSON.stringify(action.toJSON(), null, 2)}\n`);
-
-          this.emit(data.name, action);
+          this.notify.emit(actionName, action as any);
         }
       } else if (msg.type === MessageType.Response) {
         if (this.msgQueue[msg.index] !== undefined) {
-          this.msgQueue[msg.index].cb(data);
+          this.msgQueue[msg.index].cb(msg.data);
           delete this.msgQueue[msg.index];
         }
       }
     });
   }
 
-  removeNotificationListener<R extends keyof ProtobufSchemas>(
-    route: R,
-    cb: (res: NotificationCallbackReturn<R>) => void
-  ) {
-    if (!this.events[route]) return;
-    this.events[route] = this.events[route].filter((f) => f !== cb);
-  }
-
-  onNotification<R extends keyof ProtobufSchemas>(
-    route: R,
-    cb: (res: NotificationCallbackReturn<R>) => void
-  ) {
-    if (!this.events[route]) this.events[route] = [];
-    this.events[route].push(cb);
-  }
-
-  waitForNotification<R extends keyof ProtobufSchemas>(
-    route: R
-  ): Promise<NotificationCallbackReturn<R>> {
-    return new Promise((resolve) => {
-      this.onNotification(route, (notification) => {
-        this.removeNotificationListener(route, resolve as any);
-        resolve(notification);
-      });
-    });
-  }
-
   sendRequest<
-    ServiceName extends ServiceNames<ProtobufSchemas>,
-    MethodName extends MethodNames<ServiceName>
+    S extends ServiceName,
+    M extends MethodName<S>
   >(
-    serviceName: ServiceName,
-    methodName: MethodName,
-    data: MethodParam<ServiceName, MethodName> = {},
+    serviceName: S,
+    methodName: M,
+    data: Parameters<Method<S, M>>[0] = {},
     debug = false
   ) {
-    return new Promise<UnwrappedMessage<MethodReturn<ServiceName, MethodName>>>((resolve) => {
+    return new Promise<Awaited<ReturnType<Method<S, M>>>>((resolve) => {
       const encoded = this.codec.encodeMessage(serviceName, methodName, data);
 
       this.msgIndex %= 60007;
       this.msgQueue[this.msgIndex] = {
-        name: encoded.method.responseType,
-        cb: (val: UnwrappedMessage<ProtoSchemaToTs<ProtobufSchemas['ResCommon']>>) => {
+        name: encoded.method.responseType as TypeName,
+        cb:(val: lq.ResCommon) => {
           if (this.throwErrors && val.error?.code)
             throw new Error(
               `${serviceName}.${methodName}(${JSON.stringify(
@@ -264,14 +157,14 @@ export class NetAgent extends WebSocket {
     });
   }
 
-  proxyService<ServiceName extends ServiceNames<ProtobufSchemas>>(
-    serviceName: ServiceName
+  proxyService<S extends ServiceName>(
+    serviceName: S
   ) {
-    return new Proxy<ServiceProxy<ServiceName>>(
-      this as ServiceProxy<ServiceName>,
+    return new Proxy<ServiceProxy<S>>(
+      this as any,
       {
-        get(target, prop: never) {
-          // @ts-expect-error voodoo magic
+        get(target, prop) {
+          // @ts-ignore
           return target.sendRequest.bind(target, serviceName, prop);
         },
       }
