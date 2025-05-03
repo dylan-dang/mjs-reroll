@@ -3,7 +3,7 @@ import { NetAgent } from './api';
 import { Game, Operation } from './api/game';
 import { login } from './auth';
 import assert from 'assert';
-import { once } from './utils';
+import { getRandomMixedName, once } from './utils';
 import { sleep } from 'bun';
 import { debug } from '../config.json' with { type: 'json' };
 import { log } from './utils';
@@ -144,7 +144,7 @@ export async function reroll(
     sale_platform: 'web',
   };
 
-  if (!has_account)
+  if (!has_account) {
     await Lobby.oauth2Signup({
       access_token,
       client_version_string,
@@ -153,6 +153,7 @@ export async function reroll(
       tag: 'en',
       type,
     });
+  }
 
   const { account } = await Lobby.oauth2Login({
     access_token,
@@ -174,22 +175,30 @@ export async function reroll(
 
   assert(account_id, 'account_id is null!');
 
-  if (!nickname) {
-    const nickname = `User${Math.floor(Math.random() * 1000000)}`;
-    log('creating nickname', nickname);
-    await Lobby.createNickname({
-      nickname,
-      tag: 'en',
-    });
-  }
-
-  log('Logged in to Mahjong Soul using', email, 'as', nickname);
-
   await Lobby.loginBeat({
     contract: 'DF2vkXCnfeXp4WoGSBGNcJBufZiMN3UP',
   });
 
   await Lobby.loginSuccess();
+
+  if (!nickname) {
+    let error;
+    do {
+      error = false;
+      try {
+        const nickname = getRandomMixedName();
+        log('creating nickname', nickname);
+        await Lobby.createNickname({
+          nickname,
+          tag: 'en',
+        });
+      } catch {
+        error = true;
+      }
+    } while (error);
+  }
+
+  log('Logged in to Mahjong Soul using', email);
 
   if (debug) {
     await Lobby.createRoom({

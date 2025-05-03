@@ -56,3 +56,35 @@ export function once<T extends Record<any, any[]>, K extends keyof T>(
 export function log(...args: Parameters<typeof console['log']>) {
   if (verbose) console.log(...args);
 }
+
+function getRandomChineseChar() {
+  const start = 0x4E00;
+  const end = 0x9FFF;
+  const codePoint = Math.floor(Math.random() * (end - start + 1)) + start;
+  return String.fromCharCode(codePoint);
+}
+
+function getRandomAsciiChar() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  return chars[Math.floor(Math.random() * chars.length)];
+}
+
+export function getRandomMixedName(minUnits = 7, maxUnits = 14, ratio = 0.6) {
+  const targetUnits = Math.floor(Math.random() * (maxUnits - minUnits + 1)) + minUnits;
+  let currentUnits = 0;
+  let result = '';
+
+  while (currentUnits < targetUnits) {
+    // Randomly decide to insert a Chinese char (2 units) or ASCII (1 unit)
+    const useChinese = Math.random() < ratio; // adjust ratio if needed
+    if (useChinese && currentUnits <= targetUnits - 2) {
+      result += getRandomChineseChar();
+      currentUnits += 2;
+    } else {
+      result += getRandomAsciiChar();
+      currentUnits += 1;
+    }
+  }
+
+  return result;
+}
