@@ -1,0 +1,1 @@
+ALTER TABLE `accounts` ADD `games` integer DEFAULT 0 NOT NULL;
