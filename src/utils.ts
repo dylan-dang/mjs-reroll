@@ -42,20 +42,6 @@ export async function pool<T, R>(
   return results;
 }
 
-export function* drop<T>(
-  iter: Iterable<T>,
-  count: number
-): IterableIterator<T> {
-  let skipped = 0;
-  for (const item of iter) {
-    if (skipped < count) {
-      skipped++;
-      continue;
-    }
-    yield item;
-  }
-}
-
 type Key<K, T> = T extends [never] ? string | symbol : K | keyof T;
 
 export function once<T extends Record<any, any[]>, K extends keyof T>(
