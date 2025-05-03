@@ -13,7 +13,9 @@ import { accounts } from './db/schema';
 import { eq } from 'drizzle-orm';
 
 async function playGame(account_id: number, lobbyAgent: NetAgent) {
-  const gameLog = (...args: Parameters<typeof console['log']>) => verbose > 1 ? () => {} : log(account_id, '>', ...args);
+  const gameLog = (...args: Parameters<typeof console['log']>) => {
+    if (verbose > 1) log(account_id, '>', ...args);
+  };
   gameLog('waiting for match...');
 
   const { connect_token, game_uuid } = await once(
