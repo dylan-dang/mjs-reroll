@@ -5,8 +5,97 @@ import { login } from './auth';
 import assert from 'assert';
 import { once } from './utils';
 import { sleep } from 'bun';
-import { debug } from '../config.json' with { type: 'json' }
-import { log } from './utils'
+import { debug } from '../config.json' with { type: 'json' };
+import { log } from './utils';
+import {verbose} from '../config.json' with { type: 'json'};
+import { db } from './db';
+import { accounts } from './db/schema';
+import { eq } from 'drizzle-orm';
+
+async function playGame(account_id: number, lobbyAgent: NetAgent) {
+  const gameLog = (...args: Parameters<typeof console['log']>) => verbose > 1 ? () => {} : log(account_id, '>', ...args);
+  gameLog('waiting for match...');
+
+  const { connect_token, game_uuid } = await once(
+    lobbyAgent.notify,
+    debug ? 'NotifyRoomGameStart' : 'NotifyMatchGameStart'
+  );
+  gameLog('match found!');
+
+  assert(connect_token, 'connect_token is null!');
+  assert(game_uuid, 'game_uuid is null!');
+
+  const game = new Game(account_id, game_uuid, connect_token);
+  await game.init();
+
+  game.on('newRound', () => {
+    gameLog(
+      'Round',
+      ['East', 'South', 'West', 'Norht'][game.round],
+      game.jun + 1,
+      game.honba ? `Repeat ${game.honba}` : '',
+      'started!'
+    );
+    gameLog('seat:', game.seat);
+    gameLog(
+      'points:',
+      game.players.map((player) => player.score)
+    );
+  });
+
+  game.on('discard', ({ tile, seat }) => {
+    gameLog('player', seat, 'discards', tile);
+  });
+
+  game.on('operation', async ({ operation_list }) => {
+    assert(operation_list, "operation_list not found");
+    const timeuse = Math.random() * 3;
+    await sleep(timeuse * 1000);
+
+    if (operation_list.find((op) => op.type === Operation.Discard)) {
+      const index = Math.floor(Math.random() * game.hand.length);
+      const tile = game.hand[index];
+      gameLog('discarded: ', tile.toString());
+      await game.FastTest.inputOperation({
+        type: Operation.Discard,
+        moqie: index === game.hand.length - 1,
+        tile: tile.toString(),
+        tile_state: 0,
+        timeuse: Math.floor(timeuse),
+      });
+      return;
+    }
+
+    gameLog(
+      'skipped operations: ',
+      operation_list.map((op) => Operation[op.type!]).join(', ')
+    );
+    await game.FastTest.inputChiPengGang({
+      cancel_operation: true,
+      timeuse: Math.floor(timeuse),
+    });
+  });
+
+  game.agent.notify.on('ActionHule', ({ hules, gameend, scores }) => {
+    for (const hule of hules) {
+      gameLog('Player', hule.seat, hule.zimo ? 'tsumo!' : 'ron!');
+    }
+    if (gameend) gameLog('final scores: ', scores);
+
+    game.FastTest.confirmNewRound();
+  });
+
+  game.agent.notify.on('ActionNoTile', ({ gameend, scores }) => {
+    gameLog('Exhaustive Draw!');
+    if (gameend) gameLog('final scores: ', scores);
+
+    game.FastTest.confirmNewRound();
+  });
+
+  await once(game.agent.notify, 'NotifyGameEndResult');
+  gameLog('game ended!');
+  game.agent.close();
+}
 
 export async function reroll(
   gmail: gmail_v1.Gmail,
@@ -132,87 +221,12 @@ export async function reroll(
     });
   }
 
-  log('waiting for match...');
+  const cachedAccount = await db.select({gamesPlayed: accounts.gamesPlayed}).from(accounts).where(eq(accounts.email, email)).get();
+  assert(cachedAccount, "account not found in database");
+  for (let gamesPlayed = cachedAccount.gamesPlayed; gamesPlayed < 16; gamesPlayed++) {
+    await playGame(account_id, lobbyAgent);
+    await db.update(accounts).set({ gamesPlayed: gamesPlayed + 1 });
+  }
 
-  const { connect_token, game_uuid } = await once(
-    lobbyAgent.notify,
-    debug ? 'NotifyRoomGameStart' : 'NotifyMatchGameStart'
-  );
-  log('match found!');
-
-  assert(connect_token, 'connect_token is null!');
-  assert(game_uuid, 'game_uuid is null!');
-
-  const game = new Game(account_id, game_uuid, connect_token);
-  await game.init();
-
-  game.on('newRound', () => {
-    log(
-      'Round',
-      ['East', 'South', 'West', 'Norht'][game.round],
-      game.jun + 1,
-      game.honba ? `Repeat ${game.honba}` : '',
-      'started!'
-    );
-    log('seat:', game.seat);
-    log(
-      'points:',
-      game.players.map((player) => player.score)
-    );
-  });
-
-  game.on('discard', ({ tile, seat }) => {
-    log('player', seat, 'discards', tile);
-  });
-
-  game.on('operation', async ({ operation_list }) => {
-    assert(operation_list);
-    const timeuse = Math.random() * 3;
-    await sleep(timeuse * 1000);
-
-    if (operation_list.find((op) => op.type === Operation.Discard)) {
-      const index = Math.floor(Math.random() * game.hand.length);
-      const tile = game.hand[index];
-      log('discarded: ', tile.toString());
-      await game.FastTest.inputOperation({
-        type: Operation.Discard,
-        moqie: index === game.hand.length - 1,
-        tile: tile.toString(),
-        tile_state: 0,
-        timeuse: Math.floor(timeuse),
-      });
-      return;
-    }
-
-    log(
-      'skipped operations: ',
-      operation_list.map((op) => Operation[op.type!]).join(', ')
-    );
-    await game.FastTest.inputChiPengGang({
-      cancel_operation: true,
-      timeuse: Math.floor(timeuse),
-    });
-  });
-
-  game.agent.notify.on('ActionHule', ({ hules, gameend, scores }) => {
-    for (const hule of hules) {
-      log('Player', hule.seat, hule.zimo ? 'tsumo!' : 'ron!');
-    }
-    if (gameend) log('final scores: ', scores);
-
-    game.FastTest.confirmNewRound();
-  });
-
-  game.agent.notify.on('ActionNoTile', ({ gameend, scores }) => {
-    log('Exhaustive Draw!');
-    if (gameend) log('final scores: ', scores);
-
-    game.FastTest.confirmNewRound();
-  });
-
-  await once(game.agent.notify, 'NotifyGameEndResult');
-  log('game ended!');
-
-  game.agent.close();
   lobbyAgent.close();
 }

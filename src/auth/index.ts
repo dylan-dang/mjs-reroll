@@ -23,14 +23,14 @@ export async function getCodeFromEmail(gmail: gmail_v1.Gmail, email: string) {
     id: lastMessageId,
   });
 
-  assert(lastMessage.headers.date);
+  assert(lastMessage.headers.date, "date couldn't be found email");
   const dateRecieved = new Date(lastMessage.headers.date);
   if (Date.now() - dateRecieved.getTime() > 30 * 60 * 1000) return null; // outdated code
 
-  assert(lastMessage.data.snippet);
+  assert(lastMessage.data.snippet, "email snippet not found!");
 
   const numbers = lastMessage.data.snippet.match(/\d+/);
-  assert(numbers);
+  assert(numbers, "code could not be found in email");
 
   return numbers[0];
 }
