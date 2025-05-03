@@ -12,7 +12,7 @@ import { db } from './db';
 import { accounts } from './db/schema';
 import { eq } from 'drizzle-orm';
 
-async function playGame(account_id: number, lobbyAgent: NetAgent) {
+async function playGame(account_id: number, lobbyAgent: NetAgent, cb?: () => Promise<void>) {
   const gameLog = (...args: Parameters<typeof console['log']>) => {
     if (verbose > 1) log(account_id, '>', ...args);
   };
@@ -28,8 +28,6 @@ async function playGame(account_id: number, lobbyAgent: NetAgent) {
   assert(game_uuid, 'game_uuid is null!');
 
   const game = new Game(account_id, game_uuid, connect_token);
-  await game.init();
-
   game.on('newRound', () => {
     gameLog(
       'Round',
@@ -94,6 +92,8 @@ async function playGame(account_id: number, lobbyAgent: NetAgent) {
     game.FastTest.confirmNewRound();
   });
 
+  await game.init();
+  if (cb) await cb();
   await once(game.agent.notify, 'NotifyGameEndResult');
   gameLog('game ended!');
   game.agent.close();
@@ -226,8 +226,7 @@ export async function reroll(
   const cachedAccount = await db.select({gamesPlayed: accounts.gamesPlayed}).from(accounts).where(eq(accounts.email, email)).get();
   assert(cachedAccount, "account not found in database");
   for (let gamesPlayed = cachedAccount.gamesPlayed; gamesPlayed < 16; gamesPlayed++) {
-    await playGame(account_id, lobbyAgent);
-    await db.update(accounts).set({ gamesPlayed: gamesPlayed + 1 });
+    await playGame(account_id, lobbyAgent, () => db.update(accounts).set({ gamesPlayed: gamesPlayed + 1 }));
   }
 
   lobbyAgent.close();
