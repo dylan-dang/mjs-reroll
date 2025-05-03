@@ -1,24 +1,23 @@
 import assert from 'assert';
-import { getGmailClient } from './gmail';
-import { pool } from './utils';
+import { getGmailClient } from './auth/gmail';
+import { log, pool } from './utils';
 import { reroll } from './reroll';
-import { generateVariants, drop } from './utils';
-
-const DEBUG = false;
+import { generateVariants } from './utils';
+import { accounts, pool as poolAmount } from '../config.json' with { type: 'json' };
 
 async function main() {
   const gmail = await getGmailClient();
 
   const profile = await gmail.users.getProfile({ userId: 'me' });
   assert(profile.data.emailAddress);
-  console.log('Logged into gmail: ', profile.data.emailAddress);
+  log('Logged into gmail: ', profile.data.emailAddress);
   await pool(
-    [drop(generateVariants(profile.data.emailAddress), 0).next().value!],
-    (email) => reroll(gmail, email, DEBUG),
-    8
+    generateVariants(profile.data.emailAddress).take(accounts),
+    (email) => reroll(gmail, email),
+    poolAmount
   );
 
-  console.log('Account pool has been exhausted!');
+  log('Account pool has been exhausted!');
   process.exit(1);
 }
 

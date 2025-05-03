@@ -1,90 +1,16 @@
-import * as auth from './passport';
-import assert from 'assert';
-import { once, sleep } from './utils';
 import type { gmail_v1 } from 'googleapis';
-import { z } from 'zod';
 import { NetAgent } from './api';
-import { Game, Operation } from './game';
-
-const loginCacheSchema = z.record(
-  z.object({
-    uid: z.string(),
-    token: z.string(),
-  })
-);
-const loginsCacheFile = Bun.file('.cache/logins.json');
-const logins = loginCacheSchema.parse(
-  (await loginsCacheFile.exists()) ? await loginsCacheFile.json() : {}
-);
-
-async function getCodeFromEmail(gmail: gmail_v1.Gmail, email: string) {
-  const res = await gmail.users.messages.list({
-    userId: 'me',
-    includeSpamTrash: true,
-    q: `from: do-not-reply@passport.yo-star.com to:(${email})`,
-    maxResults: 1,
-  });
-  if (!res.data.messages) return null;
-
-  const lastMessageId = res.data.messages[0].id;
-  if (!lastMessageId) return null;
-
-  const lastMessage = await gmail.users.messages.get({
-    userId: 'me',
-    id: lastMessageId,
-  });
-
-  assert(lastMessage.headers.date);
-  const dateRecieved = new Date(lastMessage.headers.date);
-  if (Date.now() - dateRecieved.getTime() > 30 * 60 * 1000) return null; // outdated code
-
-  assert(lastMessage.data.snippet);
-
-  const numbers = lastMessage.data.snippet.match(/\d+/);
-  assert(numbers);
-
-  return numbers[0];
-}
-
-async function pollForCode(
-  gmail: gmail_v1.Gmail,
-  email: string,
-  interval: number = 10000,
-  maxRetries: number = 10
-) {
-  for (let retries = 0; retries < maxRetries; retries++) {
-    const code = await getCodeFromEmail(gmail, email);
-    if (code) return code;
-    await sleep(interval);
-  }
-  throw new Error(
-    `polling for ${email} code exceeded maxRetries=${maxRetries}}`
-  );
-}
-
-async function performOTP(gmail: gmail_v1.Gmail, email: string) {
-  await auth.requestAuthCode(email);
-  await sleep(5000);
-  const code = await pollForCode(gmail, email);
-  return await auth.submitAuthCode(email, code);
-}
-
-async function login(gmail: gmail_v1.Gmail, email: string) {
-  const login = logins[email];
-  try {
-    return auth.login(login.uid, login.token);
-  } finally {
-    const { uid, token } = await performOTP(gmail, email);
-    logins[email] = { uid, token };
-    Bun.write(loginsCacheFile, JSON.stringify(logins));
-    return auth.login(uid, token);
-  }
-}
+import { Game, Operation } from './api/game';
+import { login } from './auth';
+import assert from 'assert';
+import { once } from './utils';
+import { sleep } from 'bun';
+import { debug } from '../config.json' with { type: 'json' }
+import { log } from './utils'
 
 export async function reroll(
   gmail: gmail_v1.Gmail,
   email: string,
-  debug = true
 ) {
   const lobbyAgent = new NetAgent(NetAgent.gateway, { throwErrors: true });
   const Lobby = lobbyAgent.proxyService('Lobby');
@@ -159,14 +85,14 @@ export async function reroll(
 
   if (!nickname) {
     const nickname = `User${Math.floor(Math.random() * 1000000)}`;
-    console.log('creating nickname', nickname);
+    log('creating nickname', nickname);
     await Lobby.createNickname({
       nickname,
       tag: 'en',
     });
   }
 
-  console.log('Logged in to Mahjong Soul using', email, 'as', nickname);
+  log('Logged in to Mahjong Soul using', email, 'as', nickname);
 
   await Lobby.loginBeat({
     contract: 'DF2vkXCnfeXp4WoGSBGNcJBufZiMN3UP',
@@ -206,13 +132,13 @@ export async function reroll(
     });
   }
 
-  console.log('waiting for match...');
+  log('waiting for match...');
 
   const { connect_token, game_uuid } = await once(
     lobbyAgent.notify,
     debug ? 'NotifyRoomGameStart' : 'NotifyMatchGameStart'
   );
-  console.log('match found!');
+  log('match found!');
 
   assert(connect_token, 'connect_token is null!');
   assert(game_uuid, 'game_uuid is null!');
@@ -221,22 +147,22 @@ export async function reroll(
   await game.init();
 
   game.on('newRound', () => {
-    console.log(
+    log(
       'Round',
       ['East', 'South', 'West', 'Norht'][game.round],
       game.jun + 1,
       game.honba ? `Repeat ${game.honba}` : '',
       'started!'
     );
-    console.log('seat:', game.seat);
-    console.log(
+    log('seat:', game.seat);
+    log(
       'points:',
       game.players.map((player) => player.score)
     );
   });
 
   game.on('discard', ({ tile, seat }) => {
-    console.log('player', seat, 'discards', tile);
+    log('player', seat, 'discards', tile);
   });
 
   game.on('operation', async ({ operation_list }) => {
@@ -247,7 +173,7 @@ export async function reroll(
     if (operation_list.find((op) => op.type === Operation.Discard)) {
       const index = Math.floor(Math.random() * game.hand.length);
       const tile = game.hand[index];
-      console.log('discarded: ', tile.toString());
+      log('discarded: ', tile.toString());
       await game.FastTest.inputOperation({
         type: Operation.Discard,
         moqie: index === game.hand.length - 1,
@@ -258,7 +184,7 @@ export async function reroll(
       return;
     }
 
-    console.log(
+    log(
       'skipped operations: ',
       operation_list.map((op) => Operation[op.type!]).join(', ')
     );
@@ -270,22 +196,22 @@ export async function reroll(
 
   game.agent.notify.on('ActionHule', ({ hules, gameend, scores }) => {
     for (const hule of hules) {
-      console.log('Player', hule.seat, hule.zimo ? 'tsumo!' : 'ron!');
+      log('Player', hule.seat, hule.zimo ? 'tsumo!' : 'ron!');
     }
-    if (gameend) console.log('final scores: ', scores);
+    if (gameend) log('final scores: ', scores);
 
     game.FastTest.confirmNewRound();
   });
 
   game.agent.notify.on('ActionNoTile', ({ gameend, scores }) => {
-    console.log('Exhaustive Draw!');
-    if (gameend) console.log('final scores: ', scores);
+    log('Exhaustive Draw!');
+    if (gameend) log('final scores: ', scores);
 
     game.FastTest.confirmNewRound();
   });
 
   await once(game.agent.notify, 'NotifyGameEndResult');
-  console.log('game ended!');
+  log('game ended!');
 
   game.agent.close();
   lobbyAgent.close();

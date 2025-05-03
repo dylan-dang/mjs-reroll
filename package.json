@@ -2,13 +2,18 @@
   "name": "mjs-reroll",
   "module": "index.ts",
   "devDependencies": {
+    "@libsql/client": "^0.15.4",
     "@types/bun": "latest",
+    "drizzle-kit": "^0.31.1",
     "protobufjs-cli": "^1.2.0"
   },
   "scripts": {
     "download": "bun run scripts/download.ts",
     "proto:gen": "pbjs -t static --no-beautify external/res/proto/liqi.json | pbts --no-comments -o src/liqi.d.ts -",
-    "start": "bun run src/index.ts"
+    "db:gen": "bunx drizzle-kit generate",
+    "db:migrate": "bun ./src/db/migrate.ts",
+    "db:studio": "bunx drizzle-kit studio",
+    "start": "bun run ./src/index.ts"
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
@@ -16,6 +21,7 @@
   "type": "module",
   "dependencies": {
     "@google-cloud/local-auth": "^3.0.1",
+    "drizzle-orm": "^0.43.1",
     "googleapis": "^148.0.0",
     "protobufjs": "^7.5.0",
     "zod": "^3.24.3"

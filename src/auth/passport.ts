@@ -1,6 +1,6 @@
 import assert from 'assert';
 import { z } from 'zod';
-import { yo_service_url } from '../external/config.json';
+import { yo_service_url } from '../../external/config.json';
 
 const [passport] = yo_service_url;
 

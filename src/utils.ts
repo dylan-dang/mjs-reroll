@@ -1,5 +1,5 @@
-import { argv } from 'process';
 import type { EventEmitter } from 'stream';
+import { verbose } from '../config.json' with { type: 'json' }
 
 export function* generateVariants(email: string) {
   const [local, domain] = email.split('@');
@@ -42,10 +42,6 @@ export async function pool<T, R>(
   return results;
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export function* drop<T>(
   iter: Iterable<T>,
   count: number
@@ -69,4 +65,8 @@ export function once<T extends Record<any, any[]>, K extends keyof T>(
   return new Promise<T[K][0]>((resolve) => {
     emitter.once(eventName, resolve as any);
   });
+}
+
+export function log(...args: Parameters<typeof console['log']>) {
+  if (verbose) console.log(...args);
 }

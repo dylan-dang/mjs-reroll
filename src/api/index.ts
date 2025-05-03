@@ -1,10 +1,10 @@
 import pb, { type rpc } from 'protobufjs';
-import { Codec } from './codec';
-import type { lq } from './liqi.d.ts';
-import liqi from '../external/res/proto/liqi.json' with { type: 'json' };
-import { version } from '../external/version.json' with { type: 'json' };
+import { Codec } from './codec.ts';
+import type { lq } from '../liqi';
+import liqi from '../../external/res/proto/liqi.json' with { type: 'json' };
+import { version } from '../../external/version.json' with { type: 'json' };
 import { EventEmitter } from 'events';
-import { servers } from '../external/server.json' with {type: 'json'};
+import { servers } from '../../external/server.json' with {type: 'json'};
 
 const [server] = servers;
 
@@ -58,44 +58,40 @@ export type FieldTypeMap = {
 
 export interface NetAgentOptions {
   throwErrors: boolean;
-  debugNotifications: boolean;
-  debugResponses: boolean;
 };
+
+interface MessageQueueItem<T extends TypeName = TypeName> {
+  name: T,
+  cb(response: InstanceType<ProtobufClass<T>>): void;
+}
 
 export class NetAgent extends WebSocket {
   static gateway = `wss://${server}/gateway`;
   static gameGateway = `wss://${server}/game-gateway-zone`;
-  private msgQueue: { name: TypeName; cb: (response: any) => void }[] = [];
+  private msgQueue: MessageQueueItem[] = [];
   private msgIndex = 0;
   public version = version;
   private readonly codec = new Codec(pb.Root.fromJSON(liqi as pb.INamespace));
   public throwErrors: boolean;
-  public debugNotifications: boolean;
-  public debugResponses: boolean;
 
   public readonly notify = new EventEmitter<{[T in TypeName]: [InstanceType<ProtobufClass<T>>] }>();
 
   constructor(url: string, opts: Partial<NetAgentOptions> = {}) {
     super(url);
     this.throwErrors = opts.throwErrors ?? false;
-    this.debugNotifications = opts.debugNotifications ?? false;
-    this.debugResponses = opts.debugResponses ?? false;
 
     this.addEventListener('message', (event: MessageEvent<Buffer>) => {
       const msg = this.codec.decodeMessage(event.data, this.msgQueue);
 
       if (msg.type === MessageType.Notification) {
         
-        // if(this.debugNotifications) console.log(`Notification: ${name}`, data.toJSON());
-        this.notify.emit(msg.name, msg.data as any);
+        this.notify.emit(msg.name, msg.data);
 
         if (msg.name === "ActionPrototype") {
           const actionName = msg.data.name as TypeName;
           const action = this.codec.decode(actionName, this.codec.enDecodeAction(msg.data.data!));
           
-          if(this.debugNotifications) console.log(`Action: ${msg.data.name}`, action.toJSON());
-
-          this.notify.emit(actionName, action as any);
+          this.notify.emit(actionName, action);
         }
       } else if (msg.type === MessageType.Response) {
         if (this.msgQueue[msg.index] !== undefined) {
@@ -112,8 +108,7 @@ export class NetAgent extends WebSocket {
   >(
     serviceName: S,
     methodName: M,
-    data: Parameters<Method<S, M>>[0] = {},
-    debug = false
+    data: Parameters<Method<S, M>>[0] = {}
   ) {
     return new Promise<Awaited<ReturnType<Method<S, M>>>>((resolve) => {
       const encoded = this.codec.encodeMessage(serviceName, methodName, data);
@@ -121,15 +116,14 @@ export class NetAgent extends WebSocket {
       this.msgIndex %= 60007;
       this.msgQueue[this.msgIndex] = {
         name: encoded.method.responseType as TypeName,
-        cb:(val: lq.ResCommon) => {
+        cb: (val: Awaited<ReturnType<Method<S, M>>>) => {
           if (this.throwErrors && val.error?.code)
             throw new Error(
               `${serviceName}.${methodName}(${JSON.stringify(
                 data
               )}) failed with error ${JSON.stringify(val.error)}`
             );
-            if (debug || this.debugResponses) console.log(`${serviceName}.${methodName} => ${encoded.method.responseType}`, val.toJSON());
-          resolve(val as any);
+          resolve(val);
         },
       };
       const buf = Buffer.concat([
@@ -145,14 +139,16 @@ export class NetAgent extends WebSocket {
     });
   }
 
-  waitForOpen(): Promise<Event> {
-    return new Promise((resolve) => {
+  waitForOpen() {
+    return new Promise<Event | null>((resolve) => {
+      if (this.readyState === this.OPEN) resolve(null);
       this.addEventListener('open', resolve);
     });
   }
 
-  waitForClose(): Promise<CloseEvent> {
+  waitForClose(): Promise<CloseEvent | null> {
     return new Promise((resolve) => {
+      if (this.readyState === this.CLOSED) resolve(null);
       this.addEventListener('close', resolve);
     });
   }

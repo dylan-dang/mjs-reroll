@@ -1,0 +1,6 @@
+{
+    "accounts": 100,
+    "pool": 16,
+    "debug": false,
+    "verbose": false
+}

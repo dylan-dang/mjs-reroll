@@ -6,8 +6,8 @@ import {
   type ProtobufClass,
   type ServiceName,
   type TypeName,
-} from './api';
-import { lq } from './liqi';
+} from '.';
+import { lq } from '../liqi';
 
 export type DecodedMessage = {
   [T in TypeName]: {

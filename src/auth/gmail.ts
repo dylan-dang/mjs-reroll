@@ -3,7 +3,7 @@ import process from 'process';
 import { authenticate } from '@google-cloud/local-auth';
 import { google } from 'googleapis';
 import type { OAuth2Client } from 'google-auth-library';
-import credentials from '../credentials.json' with {type: 'json'};
+import credentials from '../../credentials.json' with {type: 'json'};
 
 const SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
 const tokenFile = Bun.file('.cache/token.json');

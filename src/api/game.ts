@@ -1,9 +1,9 @@
-import { NetAgent, type ServiceProxy } from './api';
+import { NetAgent, type ServiceProxy } from './index.ts';
 import { EventEmitter } from 'events';
-import { Tile } from './bot/tile';
+import { Tile } from '../tile.ts';
 import { createHmac } from 'crypto';
 import assert from 'assert';
-import { lq } from './liqi';
+import { lq } from '../liqi';
 
 export enum Operation {
   None, //none
