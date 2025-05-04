@@ -6,7 +6,7 @@ import type { OAuth2Client } from "google-auth-library";
 import credentials from "../../credentials.json" with { type: "json" };
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
-const tokenFile = Bun.file(".cache/token.json");
+const tokenFile = Bun.file("gmail.json");
 
 export async function loadSavedCredentialsIfExist() {
   try {
