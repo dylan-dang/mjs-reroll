@@ -15,7 +15,7 @@ async function main() {
   assert(profile.data.emailAddress, "email address was not found");
   log("Logged into gmail: ", profile.data.emailAddress);
   await pool(
-    generateVariants(profile.data.emailAddress).drop(32).take(accounts),
+    generateVariants(profile.data.emailAddress).take(accounts),
     (email) => reroll(gmail, email),
     poolAmount,
   );
