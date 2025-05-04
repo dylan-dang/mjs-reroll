@@ -57,7 +57,7 @@ export async function performOTP(gmail: gmail_v1.Gmail, email: string) {
   const code = await pollForCode(gmail, email);
   const loginInfo = await auth.submitAuthCode(email, code);
   const { uid, token } = loginInfo;
-  await db.insert(accounts).values({ email, uid: Number.parseInt(uid), token });
+  await db.insert(accounts).values({ email, uid, token });
   return loginInfo;
 }
 
@@ -68,5 +68,5 @@ export async function login(gmail: gmail_v1.Gmail, email: string) {
     .where(eq(accounts.email, email))
     .get();
   const { uid, token } = result ?? (await performOTP(gmail, email));
-  return auth.login(uid.toString(), token);
+  return auth.login(uid, token);
 }

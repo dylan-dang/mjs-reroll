@@ -12,7 +12,7 @@ import { db } from "./db";
 import { games } from "./db/schema";
 import { eq, count } from "drizzle-orm";
 
-async function playGame(game: Game, logPrefix?: unknown) {
+async function playGame(email: string, game: Game, logPrefix?: unknown) {
   const gameLog = (...args: Parameters<(typeof console)["log"]>) => {
     if (verbose > 1) log(logPrefix ?? "", ">", ...args);
   };
@@ -84,7 +84,7 @@ async function playGame(game: Game, logPrefix?: unknown) {
   await game.init();
   await db
     .insert(games)
-    .values({ account_id: game.accountId, game_uuid: game.uuid })
+    .values({ email, game_uuid: game.uuid })
     .onConflictDoNothing();
   await game.agent.once("NotifyGameEndResult");
   gameLog("game ended!");
@@ -193,14 +193,14 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
 
     const game = new Game(account_id, game_uuid, connect_token);
     log(account_id, "> resuming match", game_uuid);
-    await playGame(game, account_id);
+    await playGame(email, game, account_id);
     log(account_id, "> finished match");
   }
 
   const gameCount = await db
     .select({ gamesPlayed: count() })
     .from(games)
-    .where(eq(games.account_id, account_id))
+    .where(eq(games.email, email))
     .get()!;
 
   for (let { gamesPlayed } = gameCount; gamesPlayed <= 16; gamesPlayed++) {
@@ -244,7 +244,7 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     log(account_id, "> found match", game_uuid);
 
     const game = new Game(account_id, game_uuid, connect_token);
-    await playGame(game, account_id);
+    await playGame(email, game, account_id);
     log(account_id, "> finished match");
   }
 
