@@ -7,14 +7,14 @@ import { getRandomMixedName } from "./utils";
 import { sleep } from "bun";
 import { debug } from "../config.json" with { type: "json" };
 import { log } from "./utils";
-import { verbose } from "../config.json" with { type: "json" };
+import { verbosity } from "../config.json" with { type: "json" };
 import { db } from "./db";
 import { games } from "./db/schema";
 import { eq, count } from "drizzle-orm";
 
 async function playGame(email: string, game: Game, logPrefix?: unknown) {
   const gameLog = (...args: Parameters<(typeof console)["log"]>) => {
-    if (verbose > 1) log(logPrefix ?? "", ">", ...args);
+    if (verbosity > 1) log(logPrefix ?? "", ">", ...args);
   };
 
   game.on("newRound", () => {

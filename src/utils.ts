@@ -1,5 +1,5 @@
-import type { EventEmitter } from "node:events";
-import { verbose } from "../config.json" with { type: "json" };
+import { verbosity } from "../config.json" with { type: "json" };
+import { sleep } from "bun";
 
 export function* generateVariants(email: string) {
   const [local, domain] = email.split("@");
@@ -22,11 +22,14 @@ export async function pool<T, R>(
   tasks: Iterable<T>,
   workerFn: (task: T) => Promise<R>,
   concurrency = 4,
+  stagger = 0,
 ): Promise<R[]> {
   const results: R[] = [];
   const taskIterator = tasks[Symbol.iterator]();
 
-  const workers = Array.from({ length: concurrency }, async () => {
+  const workers = Array.from({ length: concurrency }, async (_, i) => {
+    await sleep(stagger * 1000 * i);
+
     let task = taskIterator.next();
     while (!task.done) {
       results.push(await workerFn(task.value));
@@ -39,7 +42,7 @@ export async function pool<T, R>(
 }
 
 export function log(...args: Parameters<(typeof console)["log"]>) {
-  if (verbose) console.log(...args);
+  if (verbosity) console.log(...args);
 }
 
 function getRandomChineseChar() {

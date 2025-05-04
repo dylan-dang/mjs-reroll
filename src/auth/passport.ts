@@ -10,6 +10,11 @@ async function send(path: string, payload: unknown) {
     body: JSON.stringify(payload),
     method: "POST",
   });
+  if (!req.ok) {
+    throw new Error(
+      `Request to passport ${path} responded with code ${req.status}: ${req.statusText}`,
+    );
+  }
   return await req.json();
 }
 

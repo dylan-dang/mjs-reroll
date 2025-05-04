@@ -3,7 +3,7 @@ import { getGmailClient } from "./auth/gmail";
 import { log, pool } from "./utils";
 import { reroll } from "./reroll";
 import { generateVariants } from "./utils";
-import { accounts, pool as poolAmount } from "../config.json" with {
+import { accounts, concurrency, stagger } from "../config.json" with {
   type: "json",
 };
 
@@ -17,7 +17,8 @@ async function main() {
   await pool(
     generateVariants(profile.data.emailAddress).take(accounts),
     (email) => reroll(gmail, email),
-    poolAmount,
+    concurrency,
+    stagger,
   );
 
   log("Account pool has been exhausted!");

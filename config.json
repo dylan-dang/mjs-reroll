@@ -1,6 +1,7 @@
 {
     "accounts": 100,
-    "pool": 16,
+    "concurrency": 25,
+    "stagger": 30,
     "debug": false,
-    "verbose": 1
+    "verbosity": 1
 }
