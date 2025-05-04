@@ -1,5 +1,5 @@
 import { NetAgent, type ServiceProxy } from "./index.ts";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { Tile } from "../tile.ts";
 import { createHmac } from "node:crypto";
 import assert from "node:assert";
@@ -161,9 +161,9 @@ export class Game extends EventEmitter<GameEventMap> {
   }
 
   constructor(
-    private accountId: number,
-    private gameUUid: string,
-    private token: string,
+    public accountId: number,
+    public uuid: string,
+    public token: string,
   ) {
     super();
 
@@ -201,7 +201,7 @@ export class Game extends EventEmitter<GameEventMap> {
 
     const game = await this.FastTest.authGame({
       account_id: this.accountId,
-      game_uuid: this.gameUUid,
+      game_uuid: this.uuid,
       token: this.token,
       gift: this.generateGift(),
     });
@@ -218,7 +218,7 @@ export class Game extends EventEmitter<GameEventMap> {
 
   private generateGift() {
     const hmac = createHmac("sha256", "damajiang");
-    hmac.update(this.token + this.accountId + this.gameUUid);
+    hmac.update(this.token + this.accountId + this.uuid);
     return hmac.digest("hex");
   }
 

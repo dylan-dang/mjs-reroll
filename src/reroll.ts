@@ -3,7 +3,7 @@ import { NetAgent } from "./api";
 import { Game, Operation } from "./api/game";
 import { login } from "./auth";
 import assert from "node:assert";
-import { getRandomMixedName, once } from "./utils";
+import { getRandomMixedName } from "./utils";
 import { sleep } from "bun";
 import { debug } from "../config.json" with { type: "json" };
 import { log } from "./utils";
@@ -12,22 +12,11 @@ import { db } from "./db";
 import { games } from "./db/schema";
 import { eq, count } from "drizzle-orm";
 
-async function playGame(account_id: number, lobbyAgent: NetAgent) {
+async function playGame(game: Game, logPrefix?: unknown) {
   const gameLog = (...args: Parameters<(typeof console)["log"]>) => {
-    if (verbose > 1) log(account_id, ">", ...args);
+    if (verbose > 1) log(logPrefix ?? "", ">", ...args);
   };
-  gameLog("waiting for match...");
 
-  const { connect_token, game_uuid } = await once(
-    lobbyAgent.notify,
-    debug ? "NotifyRoomGameStart" : "NotifyMatchGameStart",
-  );
-  gameLog("match found!");
-
-  assert(connect_token, "connect_token is null!");
-  assert(game_uuid, "game_uuid is null!");
-
-  const game = new Game(account_id, game_uuid, connect_token);
   game.on("newRound", () => {
     gameLog(
       "Round",
@@ -93,8 +82,10 @@ async function playGame(account_id: number, lobbyAgent: NetAgent) {
   });
 
   await game.init();
-  await db.insert(games).values({ account_id, game_uuid });
-  await once(game.agent.notify, "NotifyGameEndResult");
+  await db
+    .insert(games)
+    .values({ account_id: game.accountId, game_uuid: game.uuid });
+  await game.agent.once("NotifyGameEndResult");
   gameLog("game ended!");
   game.agent.close();
 }
@@ -167,20 +158,10 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
   });
 
   assert(account, "account is null!");
-
   const { account_id, nickname } = account;
-
   assert(account_id, "account_id is null!");
 
   await Lobby.loginSuccess();
-
-  if (game_info) {
-    const { connect_token, game_uuid } = game_info;
-    assert(
-      connect_token && game_uuid,
-      "game_info doesn't contain token and game uuid",
-    );
-  }
 
   if (!nickname) {
     let error: boolean;
@@ -205,36 +186,12 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     contract: "DF2vkXCnfeXp4WoGSBGNcJBufZiMN3UP",
   });
 
-  if (debug) {
-    await Lobby.createRoom({
-      client_version_string,
-      public_live: false,
-      player_count: 1,
-      mode: {
-        ai: true,
-        detail_rule: {
-          ai_level: 1,
-          bianjietishi: true,
-          dora_count: 3,
-          fandian: 30000,
-          fanfu: 1,
-          guyi_mode: 0,
-          init_point: 25000,
-          open_hand: 0,
-          shiduan: 0,
-          time_add: 20,
-          time_fixed: 5,
-        },
-        mode: 3,
-      },
-    });
+  if (game_info) {
+    const { connect_token, game_uuid } = game_info;
+    assert(connect_token && game_uuid);
 
-    await Lobby.startRoom();
-  } else {
-    await Lobby.startUnifiedMatch({
-      client_version_string,
-      match_sid: "1:2", // bronze east
-    });
+    const game = new Game(account_id, game_uuid, connect_token);
+    await playGame(game);
   }
 
   const gameCount = await db
@@ -242,8 +199,49 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     .from(games)
     .where(eq(games.account_id, account_id))
     .get()!;
+
   for (let { gamesPlayed } = gameCount; gamesPlayed <= 16; gamesPlayed++) {
-    await playGame(account_id, lobbyAgent);
+    if (debug) {
+      await Lobby.createRoom({
+        client_version_string,
+        public_live: false,
+        player_count: 1,
+        mode: {
+          ai: true,
+          detail_rule: {
+            ai_level: 1,
+            bianjietishi: true,
+            dora_count: 3,
+            fandian: 30000,
+            fanfu: 1,
+            guyi_mode: 0,
+            init_point: 25000,
+            open_hand: 0,
+            shiduan: 0,
+            time_add: 20,
+            time_fixed: 5,
+          },
+          mode: 3,
+        },
+      });
+
+      await Lobby.startRoom();
+    } else {
+      await Lobby.startUnifiedMatch({
+        client_version_string,
+        match_sid: "1:2", // bronze east
+      });
+    }
+
+    log("waiting for match...");
+
+    const { connect_token, game_uuid } = await lobbyAgent.once(
+      debug ? "NotifyRoomGameStart" : "NotifyMatchGameStart",
+    );
+    log("match found!");
+
+    const game = new Game(account_id, game_uuid, connect_token);
+    await playGame(game);
   }
 
   lobbyAgent.close();

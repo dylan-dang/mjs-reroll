@@ -38,19 +38,6 @@ export async function pool<T, R>(
   return results;
 }
 
-type Key<K, T> = T extends [never] ? string | symbol : K | keyof T;
-
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-export function once<T extends Record<any, any[]>, K extends keyof T>(
-  emitter: EventEmitter<T>,
-  eventName: Key<K, T>,
-) {
-  return new Promise<T[K][0]>((resolve) => {
-    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-    emitter.once(eventName, resolve as any);
-  });
-}
-
 export function log(...args: Parameters<(typeof console)["log"]>) {
   if (verbose) console.log(...args);
 }

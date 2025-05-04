@@ -3,7 +3,7 @@ import { Codec } from "./codec.ts";
 import type { lq } from "../liqi";
 import liqi from "../../external/res/proto/liqi.json" with { type: "json" };
 import { version } from "../../external/version.json" with { type: "json" };
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import { servers } from "../../external/server.json" with { type: "json" };
 
 const [server] = servers;
@@ -84,6 +84,13 @@ export class NetAgent extends WebSocket {
   public readonly notify = new EventEmitter<{
     [T in TypeName]: [InstanceType<ProtobufClass<T>>];
   }>();
+
+  public async once<T extends TypeName>(
+    notification: T,
+  ): Promise<InstanceType<ProtobufClass<T>>> {
+    const [result] = await once(this.notify, notification);
+    return result;
+  }
 
   constructor(url: string, opts: Partial<NetAgentOptions> = {}) {
     super(url);
