@@ -30,12 +30,19 @@ export enum Operation {
 }
 
 export enum OpenMeld {
-  Chii,
-  Pon,
-  OpenKan,
-  ClosedKan,
-  Kita,
-  AddedKan,
+  Chii, //shunzi
+  Pon, //kezi
+  OpenKan, //gang_ming
+  ClosedKan, //gang_an
+  Kita, //babei
+
+  // I don't this this is even used
+  AddedKan, //gang_add
+}
+
+export enum ClosedOrAddedKan {
+  AddedKan = 2,
+  ClosedKan = 3,
 }
 
 export class Player {
@@ -180,7 +187,10 @@ export class Game extends EventEmitter<GameEventMap> {
       this.handleDiscardTile.bind(this),
     );
     this.agent.notify.on("ActionChiPengGang", this.handleCalledTile.bind(this));
-    this.agent.notify.on("ActionAnGangAddGang", this.handleKan.bind(this));
+    this.agent.notify.on(
+      "ActionAnGangAddGang",
+      this.handleClosedOrAddedKan.bind(this),
+    );
     this.agent.notify.on("ActionBaBei", this.handleKita.bind(this));
 
     assert(
@@ -314,12 +324,10 @@ export class Game extends EventEmitter<GameEventMap> {
   private handleCalledTile(action: lq.ActionChiPengGang) {
     const player = this._players[action.seat!];
 
-    if (
-      action.type === OpenMeld.ClosedKan ||
-      action.type === OpenMeld.AddedKan
-    ) {
-      console.log(`unexpected ${OpenMeld[action.type]} in handleCalledTile`);
-    }
+    assert(
+      action.type !== OpenMeld.ClosedKan && action.type !== OpenMeld.AddedKan,
+      `unexpected ${OpenMeld[action.type]} in handleCalledTile`,
+    );
 
     action.tiles?.forEach((tileString, i) => {
       const tile = new Tile(tileString);
@@ -344,28 +352,23 @@ export class Game extends EventEmitter<GameEventMap> {
     this.emitOperation(action.operation);
   }
 
-  private handleKan(action: lq.ActionAnGangAddGang) {
+  private handleClosedOrAddedKan(action: lq.ActionAnGangAddGang) {
     const tile = new Tile(action.tiles!);
     tile.kan = true;
     const player = this._players[action.seat!];
     assert(
-      action.type === OpenMeld.ClosedKan ||
-        action.type === OpenMeld.AddedKan ||
-        action.type === OpenMeld.OpenKan,
-      `unexpected action type ${OpenMeld[action.type]} in handleClosedAndAddedKan`,
+      action.type === ClosedOrAddedKan.ClosedKan ||
+        action.type === ClosedOrAddedKan.AddedKan,
+      `unexpected action type ${ClosedOrAddedKan[action.type]} in handleClosedOrAddedKan`,
     );
 
-    if (action.type === OpenMeld.AddedKan) {
+    if (action.type === ClosedOrAddedKan.AddedKan) {
       for (const other of player.calls) {
         if (tile.strictlyEquals(other)) tile.kan = true;
       }
     }
 
-    if (action.type === OpenMeld.OpenKan) {
-      console.log("IMPORTANT AddedKan Action:", action.toJSON());
-    }
-
-    const tileCount = action.type === OpenMeld.ClosedKan ? 4 : 1;
+    const tileCount = action.type === ClosedOrAddedKan.ClosedKan ? 4 : 1;
     for (let i = 0; i < tileCount; i++) {
       player.tileCount--;
       player.calls.push(tile.clone());

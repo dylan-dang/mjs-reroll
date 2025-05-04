@@ -205,7 +205,7 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     .where(eq(games.email, email))
     .get()!;
 
-  for (let { gamesPlayed } = gameCount; gamesPlayed <= 16; gamesPlayed++) {
+  for (let { gamesPlayed } = gameCount; gamesPlayed < 16; gamesPlayed++) {
     if (debug) {
       await Lobby.leaveRoom(undefined, { throwError: false });
       await Lobby.createRoom({
@@ -244,7 +244,7 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     const { connect_token, game_uuid } = await lobbyAgent.once(
       debug ? "NotifyRoomGameStart" : "NotifyMatchGameStart",
     );
-    log(account_id, "> found match", game_uuid);
+    log(account_id, "> found match", gamesPlayed, game_uuid);
 
     const game = new Game(account_id, game_uuid, connect_token);
     await playGame(email, game, account_id);
