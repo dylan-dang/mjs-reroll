@@ -84,7 +84,8 @@ async function playGame(game: Game, logPrefix?: unknown) {
   await game.init();
   await db
     .insert(games)
-    .values({ account_id: game.accountId, game_uuid: game.uuid });
+    .values({ account_id: game.accountId, game_uuid: game.uuid })
+    .onConflictDoNothing();
   await game.agent.once("NotifyGameEndResult");
   gameLog("game ended!");
   game.agent.close();
@@ -191,7 +192,9 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     assert(connect_token && game_uuid);
 
     const game = new Game(account_id, game_uuid, connect_token);
-    await playGame(game);
+    log(account_id, "> resuming match", game_uuid);
+    await playGame(game, account_id);
+    log(account_id, "> finished match");
   }
 
   const gameCount = await db
@@ -233,15 +236,16 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
       });
     }
 
-    log("waiting for match...");
+    log(account_id, "> finding match...");
 
     const { connect_token, game_uuid } = await lobbyAgent.once(
       debug ? "NotifyRoomGameStart" : "NotifyMatchGameStart",
     );
-    log("match found!");
+    log(account_id, "> found match", game_uuid);
 
     const game = new Game(account_id, game_uuid, connect_token);
-    await playGame(game);
+    await playGame(game, account_id);
+    log(account_id, "> finished match");
   }
 
   lobbyAgent.close();

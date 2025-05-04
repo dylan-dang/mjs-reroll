@@ -87,6 +87,7 @@ export class Game extends EventEmitter<GameEventMap> {
 
   public readonly FastTest: ServiceProxy<"FastTest">;
   public readonly agent: NetAgent;
+  public syncing = false;
 
   public handIsClosed() {
     return this.hand.some((tile) => tile.from !== this.seat);
@@ -220,17 +221,16 @@ export class Game extends EventEmitter<GameEventMap> {
         step: 1000000,
       });
       assert(game_restore?.actions, "game_restore undefined");
+      this.syncing = true;
       for (const { name, data } of game_restore.actions) {
         assert(name && data);
         const actionName = name as TypeName;
 
-        const notification = this.agent.codec.decode(
-          actionName,
-          this.agent.codec.enDecodeAction(data),
-        );
+        const notification = this.agent.codec.decode(actionName, data);
 
         this.agent.notify.emit(actionName, notification);
       }
+      this.syncing = false;
       await this.FastTest.finishSyncGame();
     } else {
       await this.FastTest.enterGame();
@@ -264,7 +264,7 @@ export class Game extends EventEmitter<GameEventMap> {
     this._jun = action.ju;
     this._honba = action.ben;
     this.emit("newRound", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
   private handleDealTile(action: lq.ActionDealTile) {
@@ -276,7 +276,7 @@ export class Game extends EventEmitter<GameEventMap> {
       this._hand!.push(new Tile(action.tile!));
     }
     this.emit("deal", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
   private handleDiscardTile(action: lq.ActionDiscardTile) {
@@ -299,7 +299,7 @@ export class Game extends EventEmitter<GameEventMap> {
     }
 
     this.emit("discard", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
   private handleCalledTile(action: lq.ActionChiPengGang) {
@@ -325,7 +325,7 @@ export class Game extends EventEmitter<GameEventMap> {
     });
 
     this.emit("call", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
   private handleClosedAndAddedKan(action: lq.ActionAnGangAddGang) {
@@ -351,7 +351,7 @@ export class Game extends EventEmitter<GameEventMap> {
     }
 
     this.emit("closedOrAddedKan", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
   private handleKita(action: lq.ActionBaBei) {
@@ -359,16 +359,12 @@ export class Game extends EventEmitter<GameEventMap> {
     player.kitas++;
 
     this.emit("kita", action);
-    if (action.operation) this.emit("operation", action.operation);
+    this.emitOperation(action.operation);
   }
 
-  public onOperation(cb: (...args: GameEventMap["operation"]) => void) {
-    this.on("operation", cb);
-  }
-
-  public waitForOperation() {
-    return new Promise<GameEventMap["operation"][0]>((resolve) =>
-      this.onOperation(resolve),
-    );
+  private emitOperation(operation?: lq.IOptionalOperationList | null) {
+    if (!operation) return;
+    if (this.syncing) return;
+    this.emit("operation", operation);
   }
 }
