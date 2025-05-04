@@ -1,10 +1,10 @@
-import pb, { type rpc } from 'protobufjs';
-import { Codec } from './codec.ts';
-import type { lq } from '../liqi';
-import liqi from '../../external/res/proto/liqi.json' with { type: 'json' };
-import { version } from '../../external/version.json' with { type: 'json' };
-import { EventEmitter } from 'events';
-import { servers } from '../../external/server.json' with {type: 'json'};
+import pb, { type rpc } from "protobufjs";
+import { Codec } from "./codec.ts";
+import type { lq } from "../liqi";
+import liqi from "../../external/res/proto/liqi.json" with { type: "json" };
+import { version } from "../../external/version.json" with { type: "json" };
+import { EventEmitter } from "node:events";
+import { servers } from "../../external/server.json" with { type: "json" };
 
 const [server] = servers;
 
@@ -14,35 +14,43 @@ export enum MessageType {
   Response = 3,
 }
 
-export type ProtobufClass<T extends keyof typeof lq> = 
-(typeof lq)[T] extends abstract new (...args: any) => any
-  ? (typeof lq)[T]
-  : never
-  ;
+// biome-ignore lint/suspicious/noExplicitAny: General Class
+type ClassDefinition = abstract new (...args: any) => any;
+
+export type ProtobufClass<T extends keyof typeof lq> =
+  (typeof lq)[T] extends ClassDefinition ? (typeof lq)[T] : never;
 
 export type TypeName<T = keyof typeof lq> = T extends keyof typeof lq
-? ProtobufClass<T> extends never
-  ? never
-  : InstanceType<ProtobufClass<T>> extends rpc.Service
-  ? never
-  : T
-: never;
+  ? ProtobufClass<T> extends never
+    ? never
+    : InstanceType<ProtobufClass<T>> extends rpc.Service
+      ? never
+      : T
+  : never;
 
 export type ServiceName<T = keyof typeof lq> = T extends keyof typeof lq
   ? ProtobufClass<T> extends never
     ? never
     : InstanceType<ProtobufClass<T>> extends rpc.Service
-    ? T
-    : never
+      ? T
+      : never
   : never;
 
-
-
-export type MethodName<S extends ServiceName> = Exclude<keyof InstanceType<ProtobufClass<S>>, keyof rpc.Service | symbol>;
-export type Method<S extends ServiceName, M extends MethodName<S>> = InstanceType<ProtobufClass<S>>[M];
+export type MethodName<S extends ServiceName> = Exclude<
+  keyof InstanceType<ProtobufClass<S>>,
+  keyof rpc.Service | symbol
+>;
+export type Method<
+  S extends ServiceName,
+  M extends MethodName<S>,
+> = InstanceType<ProtobufClass<S>>[M];
 
 export type ServiceProxy<S extends ServiceName> = {
-  [M in MethodName<S>]: Method<S, M> extends (request: infer Req) => Promise<infer Res> ? (request?: Req) => Promise<Res> : never;
+  [M in MethodName<S>]: Method<S, M> extends (
+    request: infer Req,
+  ) => Promise<infer Res>
+    ? (request?: Req) => Promise<Res>
+    : never;
 };
 
 export type FieldTypeMap = {
@@ -55,13 +63,12 @@ export type FieldTypeMap = {
   bytes: Buffer;
 };
 
-
 export interface NetAgentOptions {
   throwErrors: boolean;
-};
+}
 
 interface MessageQueueItem<T extends TypeName = TypeName> {
-  name: T,
+  name: T;
   cb(response: InstanceType<ProtobufClass<T>>): void;
 }
 
@@ -74,23 +81,27 @@ export class NetAgent extends WebSocket {
   private readonly codec = new Codec(pb.Root.fromJSON(liqi as pb.INamespace));
   public throwErrors: boolean;
 
-  public readonly notify = new EventEmitter<{[T in TypeName]: [InstanceType<ProtobufClass<T>>] }>();
+  public readonly notify = new EventEmitter<{
+    [T in TypeName]: [InstanceType<ProtobufClass<T>>];
+  }>();
 
   constructor(url: string, opts: Partial<NetAgentOptions> = {}) {
     super(url);
     this.throwErrors = opts.throwErrors ?? false;
 
-    this.addEventListener('message', (event: MessageEvent<Buffer>) => {
+    this.addEventListener("message", (event: MessageEvent<Buffer>) => {
       const msg = this.codec.decodeMessage(event.data, this.msgQueue);
 
       if (msg.type === MessageType.Notification) {
-        
         this.notify.emit(msg.name, msg.data);
 
         if (msg.name === "ActionPrototype") {
           const actionName = msg.data.name as TypeName;
-          const action = this.codec.decode(actionName, this.codec.enDecodeAction(msg.data.data!));
-          
+          const action = this.codec.decode(
+            actionName,
+            this.codec.enDecodeAction(msg.data.data!),
+          );
+
           this.notify.emit(actionName, action);
         }
       } else if (msg.type === MessageType.Response) {
@@ -102,13 +113,10 @@ export class NetAgent extends WebSocket {
     });
   }
 
-  sendRequest<
-    S extends ServiceName,
-    M extends MethodName<S>
-  >(
+  sendRequest<S extends ServiceName, M extends MethodName<S>>(
     serviceName: S,
     methodName: M,
-    data: Parameters<Method<S, M>>[0] = {}
+    data: Parameters<Method<S, M>>[0] = {},
   ) {
     return new Promise<Awaited<ReturnType<Method<S, M>>>>((resolve) => {
       const encoded = this.codec.encodeMessage(serviceName, methodName, data);
@@ -120,8 +128,8 @@ export class NetAgent extends WebSocket {
           if (this.throwErrors && val.error?.code)
             throw new Error(
               `${serviceName}.${methodName}(${JSON.stringify(
-                data
-              )}) failed with error ${JSON.stringify(val.error)}`
+                data,
+              )}) failed with error ${JSON.stringify(val.error)}`,
             );
           resolve(val);
         },
@@ -142,28 +150,24 @@ export class NetAgent extends WebSocket {
   waitForOpen() {
     return new Promise<Event | null>((resolve) => {
       if (this.readyState === this.OPEN) resolve(null);
-      this.addEventListener('open', resolve);
+      this.addEventListener("open", resolve);
     });
   }
 
   waitForClose(): Promise<CloseEvent | null> {
     return new Promise((resolve) => {
       if (this.readyState === this.CLOSED) resolve(null);
-      this.addEventListener('close', resolve);
+      this.addEventListener("close", resolve);
     });
   }
 
-  proxyService<S extends ServiceName>(
-    serviceName: S
-  ) {
-    return new Proxy<ServiceProxy<S>>(
-      this as any,
-      {
-        get(target, prop) {
-          // @ts-ignore
-          return target.sendRequest.bind(target, serviceName, prop);
-        },
-      }
-    );
+  proxyService<S extends ServiceName>(serviceName: S) {
+    // biome-ignore lint/suspicious/noExplicitAny: Coerecion to Service Proxy
+    return new Proxy<ServiceProxy<S>>(this as any, {
+      get(target, prop) {
+        // @ts-ignore
+        return target.sendRequest.bind(target, serviceName, prop);
+      },
+    });
   }
 }

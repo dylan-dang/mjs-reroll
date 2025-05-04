@@ -15,6 +15,13 @@
       "when": 1746312755532,
       "tag": "0001_windy_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1746322817639,
+      "tag": "0002_milky_expediter",
+      "breakpoints": true
     }
   ]
 }

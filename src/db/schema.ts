@@ -1,8 +1,29 @@
-import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  integer,
+  text,
+  unique,
+  index,
+  primaryKey,
+} from "drizzle-orm/sqlite-core";
 
-export const accounts = sqliteTable("accounts", {
+export const accounts = sqliteTable(
+  "accounts",
+  {
     email: text("email").primaryKey(),
-    uid: text("uid").notNull(),
+    uid: integer("uid").notNull(),
     token: text("token").notNull(),
-    gamesPlayed: integer("games").default(0).notNull()
-})
+  },
+  (t) => [index("uid_index").on(t.token), unique().on(t.uid)],
+);
+
+export const games = sqliteTable(
+  "games",
+  {
+    account_id: integer("account_id")
+      .notNull()
+      .references(() => accounts.uid),
+    game_uuid: text("uuid").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.account_id, t.game_uuid] })],
+);

@@ -1,17 +1,17 @@
-import type { EventEmitter } from 'stream';
-import { verbose } from '../config.json' with { type: 'json' }
+import type { EventEmitter } from "node:events";
+import { verbose } from "../config.json" with { type: "json" };
 
 export function* generateVariants(email: string) {
-  const [local, domain] = email.split('@');
+  const [local, domain] = email.split("@");
   const n = local.length;
   const total = 1 << (n - 1); // 2^(n-1)
 
   for (let mask = 0; mask < total; mask++) {
-    let variant = '';
+    let variant = "";
     for (let i = 0; i < n; i++) {
       variant += local[i];
       if (i < n - 1 && mask & (1 << i)) {
-        variant += '.';
+        variant += ".";
       }
     }
     yield `${variant}@${domain}`;
@@ -21,7 +21,7 @@ export function* generateVariants(email: string) {
 export async function pool<T, R>(
   tasks: Iterable<T>,
   workerFn: (task: T) => Promise<R>,
-  concurrency: number = 4
+  concurrency = 4,
 ): Promise<R[]> {
   const results: R[] = [];
   const taskIterator = tasks[Symbol.iterator]();
@@ -29,11 +29,7 @@ export async function pool<T, R>(
   const workers = Array.from({ length: concurrency }, async () => {
     let task = taskIterator.next();
     while (!task.done) {
-      try {
-        results.push(await workerFn(task.value));
-      } catch (err) {
-        throw err;
-      }
+      results.push(await workerFn(task.value));
       task = taskIterator.next();
     }
   });
@@ -44,35 +40,39 @@ export async function pool<T, R>(
 
 type Key<K, T> = T extends [never] ? string | symbol : K | keyof T;
 
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 export function once<T extends Record<any, any[]>, K extends keyof T>(
   emitter: EventEmitter<T>,
-  eventName: Key<K, T>
+  eventName: Key<K, T>,
 ) {
   return new Promise<T[K][0]>((resolve) => {
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     emitter.once(eventName, resolve as any);
   });
 }
 
-export function log(...args: Parameters<typeof console['log']>) {
+export function log(...args: Parameters<(typeof console)["log"]>) {
   if (verbose) console.log(...args);
 }
 
 function getRandomChineseChar() {
-  const start = 0x4E00;
-  const end = 0x9FFF;
+  const start = 0x4e00;
+  const end = 0x9fff;
   const codePoint = Math.floor(Math.random() * (end - start + 1)) + start;
   return String.fromCharCode(codePoint);
 }
 
 function getRandomAsciiChar() {
-  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const chars =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   return chars[Math.floor(Math.random() * chars.length)];
 }
 
 export function getRandomMixedName(minUnits = 7, maxUnits = 14, ratio = 0.6) {
-  const targetUnits = Math.floor(Math.random() * (maxUnits - minUnits + 1)) + minUnits;
+  const targetUnits =
+    Math.floor(Math.random() * (maxUnits - minUnits + 1)) + minUnits;
   let currentUnits = 0;
-  let result = '';
+  let result = "";
 
   while (currentUnits < targetUnits) {
     // Randomly decide to insert a Chinese char (2 units) or ASCII (1 unit)

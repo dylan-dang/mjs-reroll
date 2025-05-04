@@ -1,9 +1,9 @@
-import { NetAgent, type ServiceProxy } from './index.ts';
-import { EventEmitter } from 'events';
-import { Tile } from '../tile.ts';
-import { createHmac } from 'crypto';
-import assert from 'assert';
-import { lq } from '../liqi';
+import { NetAgent, type ServiceProxy } from "./index.ts";
+import { EventEmitter } from "node:events";
+import { Tile } from "../tile.ts";
+import { createHmac } from "node:crypto";
+import assert from "node:assert";
+import type { lq } from "../liqi";
 
 export enum Operation {
   None, //none
@@ -44,10 +44,13 @@ export class Player {
   public discards: Tile[] = [];
   public riichiTile: Tile | null = null;
   public calls: Tile[] = [];
-  public tileCount: number = 13;
+  public tileCount = 13;
   public kitas = 0;
 
-  constructor(public accountId: number, public isSelf: boolean) {}
+  constructor(
+    public accountId: number,
+    public isSelf: boolean,
+  ) {}
 
   reset() {
     this.pond = [];
@@ -82,7 +85,7 @@ export class Game extends EventEmitter<GameEventMap> {
 
   private _config?: lq.IGameConfig;
 
-  public readonly FastTest: ServiceProxy<'FastTest'>;
+  public readonly FastTest: ServiceProxy<"FastTest">;
   public readonly agent: NetAgent;
 
   public handIsClosed() {
@@ -90,42 +93,42 @@ export class Game extends EventEmitter<GameEventMap> {
   }
 
   public get hand() {
-    assert(this._hand !== undefined, 'Game uninitialized!');
+    assert(this._hand !== undefined, "Game uninitialized!");
     return [...this._hand];
   }
 
   public get doraIndicators() {
-    assert(this._doraIndicators !== undefined, 'Game uninitialized!');
+    assert(this._doraIndicators !== undefined, "Game uninitialized!");
     return [...this._doraIndicators];
   }
 
   public get tilesLeft() {
-    assert(this._tilesLeft !== undefined, 'Game uninitialized!');
+    assert(this._tilesLeft !== undefined, "Game uninitialized!");
     return this._tilesLeft;
   }
 
   public get players() {
-    assert(this._players.length > 0, 'Game uninitialized!');
+    assert(this._players.length > 0, "Game uninitialized!");
     return [...this._players];
   }
 
   public get seat() {
-    assert(this._seat !== undefined, 'Game uninitialized!');
+    assert(this._seat !== undefined, "Game uninitialized!");
     return this._seat;
   }
 
   public get round() {
-    assert(this._round !== undefined, 'Game uninitialized!');
+    assert(this._round !== undefined, "Game uninitialized!");
     return this._round;
   }
 
   public get jun() {
-    assert(this._jun !== undefined, 'Game uninitialized!');
+    assert(this._jun !== undefined, "Game uninitialized!");
     return this._jun;
   }
 
   public get honba() {
-    assert(this._honba !== undefined, 'Game uninitialized!');
+    assert(this._honba !== undefined, "Game uninitialized!");
     return this._honba;
   }
 
@@ -143,7 +146,7 @@ export class Game extends EventEmitter<GameEventMap> {
   }
 
   public get config() {
-    assert(this._config, 'Game uninitialized!');
+    assert(this._config, "Game uninitialized!");
     return this._config;
   }
 
@@ -160,40 +163,41 @@ export class Game extends EventEmitter<GameEventMap> {
   constructor(
     private accountId: number,
     private gameUUid: string,
-    private token: string
+    private token: string,
   ) {
     super();
 
     this.agent = new NetAgent(NetAgent.gameGateway, { throwErrors: true });
-    this.FastTest = this.agent.proxyService('FastTest');
+    this.FastTest = this.agent.proxyService("FastTest");
 
-    this.agent.notify.on('ActionNewRound', this.handleNewRound.bind(this));
-    this.agent.notify.on('ActionDealTile', this.handleDealTile.bind(this));
+    this.agent.notify.on("ActionNewRound", this.handleNewRound.bind(this));
+    this.agent.notify.on("ActionDealTile", this.handleDealTile.bind(this));
     this.agent.notify.on(
-      'ActionDiscardTile',
-      this.handleDiscardTile.bind(this)
+      "ActionDiscardTile",
+      this.handleDiscardTile.bind(this),
     );
-    this.agent.notify.on('ActionChiPengGang', this.handleCalledTile.bind(this));
+    this.agent.notify.on("ActionChiPengGang", this.handleCalledTile.bind(this));
     this.agent.notify.on(
-      'ActionAnGangAddGang',
-      this.handleClosedAndAddedKan.bind(this)
+      "ActionAnGangAddGang",
+      this.handleClosedAndAddedKan.bind(this),
     );
-    this.agent.notify.on('ActionBaBei', this.handleKita.bind(this));
+    this.agent.notify.on("ActionBaBei", this.handleKita.bind(this));
   }
 
   public async init() {
     assert(
       this.agent.readyState !== this.agent.CLOSED &&
-        this.agent.readyState !== this.agent.CLOSING, "agent could not be initialized: already closed or closing"
+        this.agent.readyState !== this.agent.CLOSING,
+      "agent could not be initialized: already closed or closing",
     );
     if (this.agent.readyState !== this.agent.OPEN)
       await this.agent.waitForOpen();
     const interval = setInterval(
       () => void this.FastTest.checkNetworkDelay(),
-      2000
+      2000,
     );
 
-    this.agent.addEventListener('close', () => clearInterval(interval));
+    this.agent.addEventListener("close", () => clearInterval(interval));
 
     const game = await this.FastTest.authGame({
       account_id: this.accountId,
@@ -204,7 +208,7 @@ export class Game extends EventEmitter<GameEventMap> {
     assert(game.seat_list, "game.seat_list doesn't exist");
     this._seat = game.seat_list.indexOf(this.accountId);
     this._players = game.seat_list.map(
-      (id) => new Player(id, id === this.accountId)
+      (id) => new Player(id, id === this.accountId),
     );
     this._config = game.game_config!;
 
@@ -213,16 +217,16 @@ export class Game extends EventEmitter<GameEventMap> {
   }
 
   private generateGift() {
-    const hmac = createHmac('sha256', 'damajiang');
+    const hmac = createHmac("sha256", "damajiang");
     hmac.update(this.token + this.accountId + this.gameUUid);
-    return hmac.digest('hex');
+    return hmac.digest("hex");
   }
 
   private removeTileFromHand(tile: Tile) {
     const idx = this.hand.findIndex((otherTile) =>
-      tile.strictlyEquals(otherTile)
+      tile.strictlyEquals(otherTile),
     );
-    assert(idx !== -1, `Could not find tile in hand`);
+    assert(idx !== -1, "Could not find tile in hand");
     this.hand.splice(idx, 1);
   }
 
@@ -238,8 +242,8 @@ export class Game extends EventEmitter<GameEventMap> {
     this._round = action.chang;
     this._jun = action.ju;
     this._honba = action.ben;
-    this.emit('newRound', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("newRound", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
   private handleDealTile(action: lq.ActionDealTile) {
@@ -250,8 +254,8 @@ export class Game extends EventEmitter<GameEventMap> {
     if (player.isSelf) {
       this._hand!.push(new Tile(action.tile!));
     }
-    this.emit('deal', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("deal", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
   private handleDiscardTile(action: lq.ActionDiscardTile) {
@@ -273,8 +277,8 @@ export class Game extends EventEmitter<GameEventMap> {
       this.removeTileFromHand(tile);
     }
 
-    this.emit('discard', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("discard", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
   private handleCalledTile(action: lq.ActionChiPengGang) {
@@ -291,14 +295,16 @@ export class Game extends EventEmitter<GameEventMap> {
         if (player.isSelf) this.removeTileFromHand(tile);
       } else {
         const lastDiscarded = this._players[tile.from!].pond.pop();
-        // TODO find out why this fails sometimes...
-        // assert(lastDiscarded && lastDiscarded.equals(tile), "last tile was not the discard tile");
+        assert(
+          lastDiscarded?.equals(tile),
+          "last tile was not the discard tile",
+        );
       }
       player.calls.push(tile);
     });
 
-    this.emit('call', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("call", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
   private handleClosedAndAddedKan(action: lq.ActionAnGangAddGang) {
@@ -306,13 +312,15 @@ export class Game extends EventEmitter<GameEventMap> {
     tile.kan = true;
     const player = this._players[action.seat!];
     assert(
-      action.type === OpenMeld.ClosedKan || action.type === OpenMeld.AddedKan, "unexpected action type in handleClosedAndAddedKan"
+      action.type === OpenMeld.ClosedKan || action.type === OpenMeld.AddedKan,
+      `unexpected action type ${OpenMeld[action.type]} in handleClosedAndAddedKan`,
     );
 
-    if (action.type === OpenMeld.AddedKan)
-      player.calls
-        .filter((other) => tile.strictlyEquals(other))
-        .forEach((tile) => (tile.kan = true));
+    if (action.type === OpenMeld.AddedKan) {
+      for (const other of player.calls) {
+        if (tile.strictlyEquals(other)) tile.kan = true;
+      }
+    }
 
     const tileCount = action.type === OpenMeld.ClosedKan ? 4 : 1;
     for (let i = 0; i < tileCount; i++) {
@@ -321,25 +329,25 @@ export class Game extends EventEmitter<GameEventMap> {
       if (player.isSelf) this.removeTileFromHand(tile);
     }
 
-    this.emit('closedOrAddedKan', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("closedOrAddedKan", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
   private handleKita(action: lq.ActionBaBei) {
     const player = this._players[action.seat!];
     player.kitas++;
 
-    this.emit('kita', action);
-    if (action.operation) this.emit('operation', action.operation);
+    this.emit("kita", action);
+    if (action.operation) this.emit("operation", action.operation);
   }
 
-  public onOperation(cb: (...args: GameEventMap['operation']) => void) {
-    this.on('operation', cb);
+  public onOperation(cb: (...args: GameEventMap["operation"]) => void) {
+    this.on("operation", cb);
   }
 
   public waitForOperation() {
-    return new Promise<GameEventMap['operation'][0]>((resolve) =>
-      this.onOperation(resolve)
+    return new Promise<GameEventMap["operation"][0]>((resolve) =>
+      this.onOperation(resolve),
     );
   }
 }

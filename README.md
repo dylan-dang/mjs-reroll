@@ -6,16 +6,26 @@ To install dependencies:
 bun install
 ```
 
-To run:
+Then download external mahjong soul resources
 
 ```bash
-bun run index.ts
+bun download
 ```
 
-## TODO
+Then generate liqi.json types
 
-- [ ] - login flow
-- [ ] - enter match
-- [ ] - finish match
-- [ ] - roll
-  - [ ] - detect win
+```bash
+bun proto:gen
+```
+
+Then generate database
+
+```bash
+bun db:gen
+```
+
+Then to run
+
+```bash
+bun start
+```

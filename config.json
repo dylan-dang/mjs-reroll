@@ -1,6 +1,6 @@
 {
     "accounts": 100,
-    "pool": 16,
-    "debug": false,
+    "pool": 1,
+    "debug": true,
     "verbose": 1
 }

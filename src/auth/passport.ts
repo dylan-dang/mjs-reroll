@@ -1,26 +1,26 @@
-import assert from 'assert';
-import { z } from 'zod';
-import { yo_service_url } from '../../external/config.json';
+import assert from "node:assert";
+import { z } from "zod";
+import { yo_service_url } from "../../external/config.json";
 
 const [passport] = yo_service_url;
 
-async function send(path: string, payload: any) {
+async function send(path: string, payload: unknown) {
   const req = await fetch(new URL(path, passport), {
-    headers: { 'Content-Type': 'application/json;charset=utf-8' },
+    headers: { "Content-Type": "application/json;charset=utf-8" },
     body: JSON.stringify(payload),
-    method: 'POST',
+    method: "POST",
   });
   return await req.json();
 }
 
 export async function requestAuthCode(email: string) {
-  const res = await send('account/auth_request', {
+  const res = await send("account/auth_request", {
     account: email,
-    lang: 'en',
+    lang: "en",
   });
   assert(
     res.result === 0,
-    `Auth request failed!, recieved ${JSON.stringify(res)}`
+    `Auth request failed!, recieved ${JSON.stringify(res)}`,
   );
 }
 
@@ -35,11 +35,15 @@ const authSubmitResultSchema = z.object({
 });
 
 export async function submitAuthCode(email: string, code: string) {
-  const res = await send('account/auth_submit', {
+  const res = await send("account/auth_submit", {
     account: email,
     code,
   });
-  return authSubmitResultSchema.parse(res);
+  const { success, data } = authSubmitResultSchema.safeParse(res);
+  if (!success) {
+    throw new Error(`submit auth code failed, recieved ${JSON.stringify(res)}`);
+  }
+  return data;
 }
 
 const loginResultSchema = z.object({
@@ -60,12 +64,16 @@ const loginResultSchema = z.object({
 });
 
 export async function login(uid: string, token: string) {
-  const res = await send('user/login', {
+  const res = await send("user/login", {
     uid,
     token,
-    web_lang: 'en',
+    web_lang: "en",
     deviceId: `web|${uid}`,
   });
 
-  return loginResultSchema.parse(res);
+  const { success, data } = loginResultSchema.safeParse(res);
+  if (!success) {
+    throw new Error(`login failed, recieved ${JSON.stringify(res)}`);
+  }
+  return data;
 }

@@ -1,4 +1,4 @@
-import { Root, Type } from 'protobufjs';
+import type { Root, Type } from "protobufjs";
 import {
   MessageType,
   type Method,
@@ -6,8 +6,8 @@ import {
   type ProtobufClass,
   type ServiceName,
   type TypeName,
-} from '.';
-import { lq } from '../liqi';
+} from ".";
+import type { lq } from "../liqi";
 
 export type DecodedMessage = {
   [T in TypeName]: {
@@ -19,29 +19,6 @@ export type DecodedMessage = {
   );
 }[TypeName];
 export class Codec {
-  public static decodePaipuId(paipu: string): string {
-    let e = '';
-    for (
-      let i = '0'.charCodeAt(0), n = 'a'.charCodeAt(0), a = 0;
-      a < paipu.length;
-      a++
-    ) {
-      let o = -1;
-      const r = paipu.charAt(a),
-        s = r.charCodeAt(0);
-      s >= i && s < i + 10
-        ? (o = s - i)
-        : s >= n && s < n + 26 && (o = s - n + 10),
-        (e +=
-          -1 != o
-            ? (o = (o + 55 - a) % 36) < 10
-              ? String.fromCharCode(o + i)
-              : String.fromCharCode(o + n - 10)
-            : r);
-    }
-    return e;
-  }
-
   public static stripMessageType(data: Buffer): {
     type: MessageType;
     data: Uint8Array;
@@ -73,37 +50,37 @@ export class Codec {
   public readonly wrapper: Type;
 
   constructor(public readonly root: Root) {
-    this.wrapper = root.lookupType('Wrapper');
+    this.wrapper = root.lookupType("Wrapper");
   }
 
   public decode<T extends TypeName>(
     name: T,
-    data: Uint8Array
+    data: Uint8Array,
   ): InstanceType<ProtobufClass<T>> {
-    return this.root.lookupType(name).decode(data) as any as InstanceType<
+    return this.root.lookupType(name).decode(data) as unknown as InstanceType<
       ProtobufClass<T>
     >;
   }
 
   public enDecodeAction(p: Uint8Array) {
     for (
-      var L = [132, 94, 78, 66, 57, 162, 31, 96, 28], t = 0;
+      let L = [132, 94, 78, 66, 57, 162, 31, 96, 28], t = 0;
       t < p.byteLength;
       t++
     ) {
-      var j = ((23 ^ p.byteLength) + 5 * t + L[t % L.length]) & 255;
+      const j = ((23 ^ p.byteLength) + 5 * t + L[t % L.length]) & 255;
       p[t] ^= j;
     }
     return p;
   }
 
   public unwrap(data: Uint8Array) {
-    return this.wrapper.decode(data) as any as lq.Wrapper;
+    return this.wrapper.decode(data) as unknown as lq.Wrapper;
   }
 
   public decodeMessage(
     message: Buffer,
-    nameMap: { name: TypeName }[]
+    nameMap: { name: TypeName }[],
   ): DecodedMessage {
     const { type, data: wrappedData } = Codec.stripMessageType(message);
     if (type === MessageType.Notification) {
@@ -131,17 +108,19 @@ export class Codec {
   public encodeMessage<S extends ServiceName, M extends MethodName<S>>(
     serviceName: S,
     methodName: M,
-    data: Parameters<Method<S, M>>[0]
+    data: Parameters<Method<S, M>>[0],
   ) {
     const name = `.lq.${serviceName}.${methodName}`;
 
-    const service = this.root.lookupService(['lq', serviceName]);
+    const service = this.root.lookupService(["lq", serviceName]);
     const method = service.methods[methodName];
 
     const reqType = this.root.lookupType(method.requestType);
     const payload = {
       name,
-      data: reqType.encode(reqType.create(data as Record<any, any>)).finish(),
+      data: reqType
+        .encode(reqType.create(data as Record<string, unknown>))
+        .finish(),
     };
 
     return {
