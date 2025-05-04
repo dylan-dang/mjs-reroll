@@ -45,12 +45,13 @@ export type Method<
   M extends MethodName<S>,
 > = InstanceType<ProtobufClass<S>>[M];
 
+// biome-ignore lint/suspicious/noExplicitAny: generic
+type DropTwo<T extends any[]> = T extends [any, any, ...infer Rest] ? Rest : [];
+
 export type ServiceProxy<S extends ServiceName> = {
-  [M in MethodName<S>]: Method<S, M> extends (
-    request: infer Req,
-  ) => Promise<infer Res>
-    ? (request?: Req) => Promise<Res>
-    : never;
+  [M in MethodName<S>]: (
+    ...params: DropTwo<Parameters<typeof NetAgent.prototype.sendRequest<S, M>>>
+  ) => ReturnType<typeof NetAgent.prototype.sendRequest<S, M>>;
 };
 
 export type FieldTypeMap = {
@@ -124,6 +125,9 @@ export class NetAgent extends WebSocket {
     serviceName: S,
     methodName: M,
     data: Parameters<Method<S, M>>[0] = {},
+    opts?: Partial<{
+      throwError: boolean;
+    }>,
   ) {
     return new Promise<Awaited<ReturnType<Method<S, M>>>>((resolve) => {
       const encoded = this.codec.encodeMessage(serviceName, methodName, data);
@@ -132,7 +136,7 @@ export class NetAgent extends WebSocket {
       this.msgQueue[this.msgIndex] = {
         name: encoded.method.responseType as TypeName,
         cb: (val: Awaited<ReturnType<Method<S, M>>>) => {
-          if (this.throwErrors && val.error?.code)
+          if ((opts?.throwError ?? this.throwErrors) && val.error?.code)
             throw new Error(
               `${serviceName}.${methodName}(${JSON.stringify(
                 data,

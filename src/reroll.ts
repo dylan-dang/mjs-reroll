@@ -89,6 +89,8 @@ async function playGame(email: string, game: Game, logPrefix?: unknown) {
   await game.agent.once("NotifyGameEndResult");
   gameLog("game ended!");
   game.agent.close();
+  // we have to wait to start a new game
+  await sleep(5000);
 }
 
 export async function reroll(gmail: gmail_v1.Gmail, email: string) {
@@ -205,6 +207,7 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
 
   for (let { gamesPlayed } = gameCount; gamesPlayed <= 16; gamesPlayed++) {
     if (debug) {
+      await Lobby.leaveRoom(undefined, { throwError: false });
       await Lobby.createRoom({
         client_version_string,
         public_live: false,

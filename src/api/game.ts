@@ -68,7 +68,7 @@ export type GameEventMap = {
   deal: [lq.ActionDealTile];
   discard: [lq.ActionDiscardTile];
   call: [lq.ActionChiPengGang];
-  closedOrAddedKan: [lq.ActionAnGangAddGang];
+  kan: [lq.ActionAnGangAddGang];
   kita: [lq.ActionBaBei];
 };
 
@@ -85,9 +85,10 @@ export class Game extends EventEmitter<GameEventMap> {
 
   private _config?: lq.IGameConfig;
 
-  public readonly FastTest: ServiceProxy<"FastTest">;
-  public readonly agent: NetAgent;
+  public FastTest: ServiceProxy<"FastTest">;
+  public agent: NetAgent;
   public syncing = false;
+  public ended = false;
 
   public handIsClosed() {
     return this.hand.some((tile) => tile.from !== this.seat);
@@ -167,10 +168,11 @@ export class Game extends EventEmitter<GameEventMap> {
     public readonly token: string,
   ) {
     super();
-
     this.agent = new NetAgent(NetAgent.gameGateway, { throwErrors: true });
     this.FastTest = this.agent.proxyService("FastTest");
+  }
 
+  public async init() {
     this.agent.notify.on("ActionNewRound", this.handleNewRound.bind(this));
     this.agent.notify.on("ActionDealTile", this.handleDealTile.bind(this));
     this.agent.notify.on(
@@ -178,14 +180,9 @@ export class Game extends EventEmitter<GameEventMap> {
       this.handleDiscardTile.bind(this),
     );
     this.agent.notify.on("ActionChiPengGang", this.handleCalledTile.bind(this));
-    this.agent.notify.on(
-      "ActionAnGangAddGang",
-      this.handleClosedAndAddedKan.bind(this),
-    );
+    this.agent.notify.on("ActionAnGangAddGang", this.handleKan.bind(this));
     this.agent.notify.on("ActionBaBei", this.handleKita.bind(this));
-  }
 
-  public async init() {
     assert(
       this.agent.readyState !== this.agent.CLOSED &&
         this.agent.readyState !== this.agent.CLOSING,
@@ -198,7 +195,19 @@ export class Game extends EventEmitter<GameEventMap> {
       2000,
     );
 
-    this.agent.addEventListener("close", () => clearInterval(interval));
+    this.agent.addEventListener("close", async () => {
+      clearInterval(interval);
+      if (!this.ended) {
+        // reconnect
+        this.agent = new NetAgent(NetAgent.gameGateway, { throwErrors: true });
+        this.FastTest = this.agent.proxyService("FastTest");
+        await this.init();
+      }
+    });
+
+    this.agent.notify.on("NotifyGameEndResult", (result) => {
+      this.ended = true;
+    });
 
     const { seat_list, game_config, is_game_start } =
       await this.FastTest.authGame({
@@ -305,6 +314,13 @@ export class Game extends EventEmitter<GameEventMap> {
   private handleCalledTile(action: lq.ActionChiPengGang) {
     const player = this._players[action.seat!];
 
+    if (
+      action.type === OpenMeld.ClosedKan ||
+      action.type === OpenMeld.AddedKan
+    ) {
+      console.log(`unexpected ${OpenMeld[action.type]} in handleCalledTile`);
+    }
+
     action.tiles?.forEach((tileString, i) => {
       const tile = new Tile(tileString);
       tile.from = action.froms![i];
@@ -328,12 +344,14 @@ export class Game extends EventEmitter<GameEventMap> {
     this.emitOperation(action.operation);
   }
 
-  private handleClosedAndAddedKan(action: lq.ActionAnGangAddGang) {
+  private handleKan(action: lq.ActionAnGangAddGang) {
     const tile = new Tile(action.tiles!);
     tile.kan = true;
     const player = this._players[action.seat!];
     assert(
-      action.type === OpenMeld.ClosedKan || action.type === OpenMeld.AddedKan,
+      action.type === OpenMeld.ClosedKan ||
+        action.type === OpenMeld.AddedKan ||
+        action.type === OpenMeld.OpenKan,
       `unexpected action type ${OpenMeld[action.type]} in handleClosedAndAddedKan`,
     );
 
@@ -343,6 +361,10 @@ export class Game extends EventEmitter<GameEventMap> {
       }
     }
 
+    if (action.type === OpenMeld.OpenKan) {
+      console.log("IMPORTANT AddedKan Action:", action.toJSON());
+    }
+
     const tileCount = action.type === OpenMeld.ClosedKan ? 4 : 1;
     for (let i = 0; i < tileCount; i++) {
       player.tileCount--;
@@ -350,7 +372,7 @@ export class Game extends EventEmitter<GameEventMap> {
       if (player.isSelf) this.removeTileFromHand(tile);
     }
 
-    this.emit("closedOrAddedKan", action);
+    this.emit("kan", action);
     this.emitOperation(action.operation);
   }
 
