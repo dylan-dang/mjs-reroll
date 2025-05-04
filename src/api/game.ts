@@ -1,4 +1,4 @@
-import { NetAgent, type ServiceProxy } from "./index.ts";
+import { NetAgent, type ServiceProxy, type TypeName } from "./index.ts";
 import { EventEmitter, once } from "node:events";
 import { Tile } from "../tile.ts";
 import { createHmac } from "node:crypto";
@@ -161,9 +161,9 @@ export class Game extends EventEmitter<GameEventMap> {
   }
 
   constructor(
-    public accountId: number,
-    public uuid: string,
-    public token: string,
+    public readonly accountId: number,
+    public readonly uuid: string,
+    public readonly token: string,
   ) {
     super();
 
@@ -199,21 +199,42 @@ export class Game extends EventEmitter<GameEventMap> {
 
     this.agent.addEventListener("close", () => clearInterval(interval));
 
-    const game = await this.FastTest.authGame({
-      account_id: this.accountId,
-      game_uuid: this.uuid,
-      token: this.token,
-      gift: this.generateGift(),
-    });
-    assert(game.seat_list, "game.seat_list doesn't exist");
-    this._seat = game.seat_list.indexOf(this.accountId);
-    this._players = game.seat_list.map(
+    const { seat_list, game_config, is_game_start } =
+      await this.FastTest.authGame({
+        account_id: this.accountId,
+        game_uuid: this.uuid,
+        token: this.token,
+        gift: this.generateGift(),
+      });
+    this._seat = seat_list.indexOf(this.accountId);
+    this._players = seat_list.map(
       (id) => new Player(id, id === this.accountId),
     );
-    this._config = game.game_config!;
 
-    await this.FastTest.enterGame();
-    // todo restore and sync games
+    assert(game_config, "game_config undefined");
+    this._config = game_config;
+
+    if (is_game_start) {
+      const { game_restore } = await this.FastTest.syncGame({
+        round_id: "-1",
+        step: 1000000,
+      });
+      assert(game_restore?.actions, "game_restore undefined");
+      for (const { name, data } of game_restore.actions) {
+        assert(name && data);
+        const actionName = name as TypeName;
+
+        const notification = this.agent.codec.decode(
+          actionName,
+          this.agent.codec.enDecodeAction(data),
+        );
+
+        this.agent.notify.emit(actionName, notification);
+      }
+      await this.FastTest.finishSyncGame();
+    } else {
+      await this.FastTest.enterGame();
+    }
   }
 
   private generateGift() {

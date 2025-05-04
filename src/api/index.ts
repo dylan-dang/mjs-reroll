@@ -78,7 +78,7 @@ export class NetAgent extends WebSocket {
   private msgQueue: MessageQueueItem[] = [];
   private msgIndex = 0;
   public version = version;
-  private readonly codec = new Codec(pb.Root.fromJSON(liqi as pb.INamespace));
+  public readonly codec = new Codec(pb.Root.fromJSON(liqi as pb.INamespace));
   public throwErrors: boolean;
 
   public readonly notify = new EventEmitter<{
