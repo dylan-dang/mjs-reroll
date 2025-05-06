@@ -1,14 +1,11 @@
 import { styleText } from "node:util";
+import type { Game } from "./api/game";
 
 export interface ITile {
   index: number;
   type: number;
-  dora?: boolean;
-  doraValue?: number;
-  valid?: boolean;
+  akadora?: boolean;
   from?: number;
-  kan?: boolean;
-  old?: boolean;
 }
 
 export enum Suit {
@@ -25,59 +22,59 @@ const emojis = [
   ["", "🀀", "🀁", "🀂", "🀃", "🀆", "🀅", "🀄"],
 ];
 
+export type CalledTile = Tile & { from: number };
 export class Tile implements ITile {
   public index: number;
   public type: Suit;
-  public dora: boolean;
+  public akadora: boolean;
   public doraValue?: number;
-  public valid?: boolean;
   public from?: number;
-  public kan?: boolean;
-  public old?: boolean;
 
-  constructor(str: string);
-  constructor(tile: ITile);
-  constructor(strOrTile: string | ITile) {
-    if (typeof strOrTile === "string") {
-      const index = Number.parseInt(strOrTile.charAt(0));
-      this.dora = index === 0;
-      this.index = this.dora ? 5 : index;
-      const type = Suit[strOrTile.charAt(1) as keyof typeof Suit];
-      if (type === undefined) throw new Error("Invalid tile type");
-      this.type = type;
-    } else {
-      this.index = strOrTile.index;
-      this.type = strOrTile.type;
-      this.dora = strOrTile.dora ?? false;
-      this.doraValue = strOrTile.doraValue;
-      this.valid = strOrTile.valid;
-      this.from = strOrTile.from;
-      this.kan = strOrTile.kan;
-      this.old = strOrTile.old;
-    }
+  constructor(tile: ITile) {
+    this.index = tile.index;
+    this.type = tile.type;
+    this.akadora = tile.akadora ?? false;
+    this.from = tile.from;
+  }
+
+  static parse(tileStr: string): Tile {
+    const firstChar = Number.parseInt(tileStr.charAt(0));
+    const akadora = firstChar === 0;
+    const type = Suit[tileStr.charAt(1) as keyof typeof Suit];
+    if (type === undefined) throw new Error("Invalid tile type");
+    return new Tile({
+      akadora,
+      index: akadora ? 5 : firstChar,
+      type,
+    });
+  }
+
+  called(from: number): CalledTile {
+    this.from = from;
+    return this as CalledTile;
   }
 
   toString() {
-    return `${this.dora ? 0 : this.index}${Suit[this.type]}`;
+    return `${this.akadora ? 0 : this.index}${Suit[this.type]}`;
   }
 
-  strictlyEquals(tile: ITile) {
-    return this.equals(tile) && (this.dora ?? false) === (tile.dora ?? false);
+  strictlyEquals(tile: ITile | string): boolean {
+    if (typeof tile === "string") return this.strictlyEquals(Tile.parse(tile));
+    const matchesAkadora = (this.akadora ?? false) === (tile.akadora ?? false);
+    return this.equals(tile) && matchesAkadora;
   }
 
-  equals(tileStr: string): boolean;
-  equals(tile: ITile): boolean;
-  equals(tile: ITile | string) {
-    if (typeof tile === "string") return this.equals(new Tile(tile));
+  equals(tile: ITile | string): boolean {
+    if (typeof tile === "string") return this.equals(Tile.parse(tile));
     return this.index === tile.index && this.type === tile.type;
   }
 
-  clone() {
-    return new Tile(this);
+  clone(partial: Partial<ITile> = {}) {
+    return new Tile({ ...this, ...partial });
   }
 
-  distance(tile: ITile) {
-    if (tile.type !== this.type) return Number.POSITIVE_INFINITY;
+  distance(tile?: ITile | null) {
+    if (!tile || tile.type !== this.type) return Number.POSITIVE_INFINITY;
     if (tile.type === 3)
       return this.index === tile.index ? 0 : Number.POSITIVE_INFINITY;
     return Math.abs(this.index - tile.index);
@@ -101,6 +98,14 @@ export class Tile implements ITile {
   }
 
   emoji() {
-    return emojis[this.type][this.dora ? 0 : this.index];
+    return emojis[this.type][this.akadora ? 0 : this.index];
+  }
+
+  isSeatWind(seat: number) {
+    return this.type === Suit.z && this.index === seat + 1;
+  }
+
+  isRoundWind(game: Game) {
+    return this.type === Suit.z && this.index === game.round + 1;
   }
 }

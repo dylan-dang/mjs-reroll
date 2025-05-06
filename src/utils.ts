@@ -42,7 +42,8 @@ export async function pool<T, R>(
 }
 
 export function log(...args: Parameters<(typeof console)["log"]>) {
-  if (verbosity) console.log(...args);
+  const date = new Date(Date.now());
+  if (verbosity) console.log(`[${date.getHours()}:${date.getMinutes()}:${date.getSeconds()}]`,...args);
 }
 
 function getRandomChineseChar() {
@@ -74,6 +75,29 @@ export function getRandomMixedName(minUnits = 7, maxUnits = 14, ratio = 0.6) {
       result += getRandomAsciiChar();
       currentUnits += 1;
     }
+  }
+
+  return result;
+}
+
+export function clamp(value: number, min: number, max: number) {
+  return Math.min(Math.max(value, min), max);
+}
+
+export function zip<A, B>(a: Iterable<A>, b: Iterable<B>): [A, B][];
+export function zip<A, B, C>(
+  a: Iterable<A>,
+  b: Iterable<B>,
+  c: Iterable<C>,
+): [A, B, C][];
+export function zip(...iterables: Iterable<unknown>[]): unknown[][] {
+  const iterators = iterables.map((it) => it[Symbol.iterator]());
+  const result: unknown[][] = [];
+
+  while (true) {
+    const values = iterators.map((it) => it.next());
+    if (values.some((v) => v.done)) break;
+    result.push(values.map((v) => v.value));
   }
 
   return result;

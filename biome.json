@@ -22,7 +22,8 @@
 			"recommended": true,
 			"style": {
 				"noNonNullAssertion": "off",
-				"useEnumInitializers": "off"
+				"useEnumInitializers": "off",
+				"noVar": "off"
 			}
 		}
 	},

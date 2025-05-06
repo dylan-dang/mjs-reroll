@@ -1,5 +1,6 @@
 import type { gmail_v1 } from "googleapis";
 import { NetAgent } from "./api";
+import {fetchActivities} from './api/activity'
 import { Game, Operation } from "./api/game";
 import { login } from "./auth";
 import assert from "node:assert";
@@ -11,6 +12,15 @@ import { verbosity } from "../config.json" with { type: "json" };
 import { db } from "./db";
 import { games } from "./db/schema";
 import { eq, count } from "drizzle-orm";
+
+async function getGamesPlayed(email: string) {
+  return await db
+  .select({ gamesPlayed: count() })
+  .from(games)
+  .where(eq(games.email, email))
+  .get()!.gamesPlayed;
+
+}
 
 async function playGame(email: string, game: Game, logPrefix?: unknown) {
   const gameLog = (...args: Parameters<(typeof console)["log"]>) => {
@@ -42,12 +52,13 @@ async function playGame(email: string, game: Game, logPrefix?: unknown) {
     await sleep(timeuse * 1000);
 
     if (operation_list.find((op) => op.type === Operation.Discard)) {
-      const index = Math.floor(Math.random() * game.hand.length);
-      const tile = game.hand[index];
+      const hand = game.self.hand;
+      const index = Math.floor(Math.random() * hand.length);
+      const tile = hand[index];
       gameLog("discarded: ", tile.toString());
       await game.FastTest.inputOperation({
         type: Operation.Discard,
-        moqie: index === game.hand.length - 1,
+        moqie: index === hand.length - 1,
         tile: tile.toString(),
         tile_state: 0,
         timeuse: Math.floor(timeuse),
@@ -199,13 +210,15 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     log(account_id, "> finished match");
   }
 
-  const gameCount = await db
-    .select({ gamesPlayed: count() })
-    .from(games)
-    .where(eq(games.email, email))
-    .get()!;
 
-  for (let { gamesPlayed } = gameCount; gamesPlayed < 16; gamesPlayed++) {
+  const {amulet, sim_v2} = await fetchActivities(Lobby);
+  assert(sim_v2?.activity_id)
+  assert(amulet?.activity_id)
+
+  await Lobby.taskRequest({ params: [amulet.activity_id] }, {throwError: false});
+  await Lobby.taskRequest({ params: [sim_v2.activity_id] }, {throwError: false});
+
+  for (let gamesPlayed = await getGamesPlayed(email); gamesPlayed < 16; gamesPlayed++) {
     if (debug) {
       await Lobby.leaveRoom(undefined, { throwError: false });
       await Lobby.createRoom({
@@ -250,6 +263,8 @@ export async function reroll(gmail: gmail_v1.Gmail, email: string) {
     await playGame(email, game, account_id);
     log(account_id, "> finished match");
   }
+
+  log("Exited account", email);
 
   lobbyAgent.close();
 }

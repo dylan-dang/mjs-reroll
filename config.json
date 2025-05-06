@@ -1,7 +1,7 @@
 {
-    "accounts": 100,
-    "concurrency": 25,
-    "stagger": 30,
+    "accounts": 500,
+    "concurrency": 100,
+    "stagger": 15,
     "debug": false,
     "verbosity": 1
 }
