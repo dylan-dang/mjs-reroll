@@ -29,6 +29,34 @@
       "when": 1746335583033,
       "tag": "0003_graceful_norman_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1746579502314,
+      "tag": "0004_wet_captain_stacy",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1746580241500,
+      "tag": "0005_needy_mindworm",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1746581461429,
+      "tag": "0006_cooing_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1746581536674,
+      "tag": "0007_lush_magus",
+      "breakpoints": true
     }
   ]
 }
