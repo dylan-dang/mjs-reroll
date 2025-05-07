@@ -1,1 +1,1 @@
-ALTER TABLE `accounts` ADD `pulled` integer;
+ALTER TABLE `accounts` ADD `pulled` INTEGER NOT NULL DEFAULT 0;
